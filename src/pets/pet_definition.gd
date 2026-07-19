@@ -26,6 +26,10 @@ extends Resource
 	Vector2(-126, -28),
 ])
 
+@export_category("Quick Actions")
+@export var focus_hotspot_centers := PackedVector2Array()
+@export_range(0.0, 64.0, 1.0) var focus_hotspot_radius := 0.0
+
 @export_category("Click Effect")
 @export var show_click_heart := true
 @export var heart_position := Vector2(78, -86)

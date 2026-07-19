@@ -1,14 +1,18 @@
 @echo off
 setlocal
 
-set "PROJECT_DIR=%~dp0"
-set "GODOT_EXE=%PROJECT_DIR%.tools\godot-4.7.1\Godot_v4.7.1-stable_win64.exe"
-
-if not exist "%GODOT_EXE%" (
-    echo Godot was not found inside the DesktopPet folder.
-    echo Expected: %GODOT_EXE%
+set "LAUNCH_SCRIPT=%~dp0launch.ps1"
+if not exist "%LAUNCH_SCRIPT%" (
+    echo Desktop Pet launcher was not found.
+    echo Expected: %LAUNCH_SCRIPT%
     pause
     exit /b 1
 )
 
-start "" "%GODOT_EXE%" --path "%PROJECT_DIR%"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%LAUNCH_SCRIPT%"
+if errorlevel 1 (
+    echo.
+    echo Desktop Pet could not be started.
+    pause
+    exit /b 1
+)
