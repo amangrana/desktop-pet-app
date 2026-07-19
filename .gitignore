@@ -1,0 +1,13 @@
+.godot/
+.tools/
+.mono/
+bin/
+obj/
+*.user
+
+# Superseded local artwork snapshot; runtime assets live in assets/pets/leo.
+/assets/pets/pug/
+
+# Local OS/editor noise.
+Thumbs.db
+.DS_Store
