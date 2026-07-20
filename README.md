@@ -168,6 +168,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 - 程序在 Windows 通知区域显示托盘图标；托盘菜单可显示/隐藏宠物、开始专注、打开 Pet Notes 或退出
 - 程序提供 Windows 通知区域托盘入口；主宠物窗口通过 `ITaskbarList::DeleteTab` 隐藏任务栏按钮，不修改 Godot 窗口样式
 - 宠物右键菜单保持无焦点窗口的稳定打开路径，并继续实时刷新计时状态；不得在菜单开关时切换透明主窗口焦点样式
+- Windows 默认通过 ANGLE（Direct3D 11）运行 Compatibility renderer，避免部分 AMD 原生 OpenGL 驱动把透明窗口区域合成为黑色；ANGLE 不可用时回退到原生 OpenGL
+- 自动化测试使用独立的 `user://` 设置文件，不得覆盖正式应用的计时、提醒或语言设置；旧版测试写入的 `40/8/75/35/15` 指纹会在启动时恢复为产品默认值并清除测试 reminder 状态
+- 宠物显示比例同时调整右键主菜单、下级菜单和 reminder `More` 菜单的字体、行距与留白；Windows 原生托盘菜单继续由系统 DPI 控制
 - 在菜单中点击 `Exit Desktop Pet`：退出
 
 ## 项目结构
@@ -240,6 +243,8 @@ tests/google_calendar_disconnect_policy_test.gd
                                   主动断连、立即重启与重新授权策略自测
 tests/system_tray_integration_test.gd
                                   任务栏隐藏、托盘菜单和显示/隐藏行为自测
+tests/windows_transparency_configuration_test.gd
+                                  Windows 透明窗口与 ANGLE 回退配置自测
 ```
 
 ## 添加新宠物

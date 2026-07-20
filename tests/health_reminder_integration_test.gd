@@ -31,6 +31,10 @@ func _run() -> void:
 	var main = MainScene.instantiate()
 	root.add_child(main)
 	await process_frame
+	_expect(
+		main._settings_file_path() != main.SETTINGS_FILE,
+		"automated tests must not use the production settings file"
+	)
 
 	_expect(
 		main.context_menu.get_item_index(REMINDERS_SUBMENU_ID) >= 0,
@@ -381,7 +385,7 @@ func _run() -> void:
 	main._save_settings()
 	var config := ConfigFile.new()
 	_expect(
-		config.load("user://prototype-settings.cfg") == OK,
+		config.load(main._settings_file_path()) == OK,
 		"health reminder settings must be written to the local config"
 	)
 	_expect(
@@ -445,6 +449,76 @@ func _run() -> void:
 				localized_main.reminder_manager.quiet_hours_enabled(),
 			]
 		)
+	)
+	var contaminated_config := ConfigFile.new()
+	contaminated_config.set_value(
+		"timer_defaults",
+		"focus_duration_seconds",
+		40 * 60
+	)
+	contaminated_config.set_value(
+		"timer_defaults",
+		"break_duration_seconds",
+		8 * 60
+	)
+	contaminated_config.set_value("interface", "language", "zh_CN")
+	contaminated_config.set_value("reminders", "snapshot", {
+		"preferences": {
+			"water_interval_seconds": 75 * 60,
+			"stand_interval_seconds": 35 * 60,
+			"snooze_seconds": 15 * 60,
+			"quiet_enabled": true,
+		},
+		"water": {"enabled": true},
+		"stand": {"enabled": true},
+	})
+	_expect(
+		localized_main._recover_legacy_test_settings(
+			contaminated_config
+		)
+		and int(contaminated_config.get_value(
+			"timer_defaults",
+			"focus_duration_seconds",
+			0
+		)) == 25 * 60
+		and int(contaminated_config.get_value(
+			"timer_defaults",
+			"break_duration_seconds",
+			0
+		)) == 5 * 60
+		and contaminated_config.get_value(
+			"reminders",
+			"snapshot",
+			{"unexpected": true}
+		).is_empty(),
+		"the legacy integration-test fingerprint must reset safely"
+	)
+	var legitimate_config := ConfigFile.new()
+	legitimate_config.set_value(
+		"timer_defaults",
+		"focus_duration_seconds",
+		40 * 60
+	)
+	legitimate_config.set_value(
+		"timer_defaults",
+		"break_duration_seconds",
+		8 * 60
+	)
+	legitimate_config.set_value("reminders", "snapshot", {
+		"preferences": {
+			"water_interval_seconds": 75 * 60,
+			"stand_interval_seconds": 35 * 60,
+			"snooze_seconds": 15 * 60,
+			"quiet_enabled": false,
+		},
+		"water": {"enabled": true},
+		"stand": {"enabled": true},
+	})
+	_expect(
+		not localized_main._recover_legacy_test_settings(
+			legitimate_config
+		),
+		"similar intentional user settings must not be reset"
 	)
 	localized_main.shutting_down = true
 	if _failed:
