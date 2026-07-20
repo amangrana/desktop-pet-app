@@ -42,8 +42,103 @@ func _run() -> void:
 		)
 		and main.pet_notes_calendar_card.has_theme_stylebox_override(
 			"panel"
-		),
-		"Pet Notes settings must use the compact card layout"
+		)
+		and not main.pet_notes_scroll.get_v_scroll_bar().visible,
+		(
+			"Pet Notes settings must use the compact card layout "
+			+ "(body_min=%s scroll=%s)"
+			% [
+				main.pet_notes_scroll_content.get_combined_minimum_size(),
+				main.pet_notes_scroll.size,
+			]
+		)
+	)
+	main.google_calendar_provider._set_state(
+		main.GoogleCalendarProviderScript.State.ERROR,
+		"client_secret_missing"
+	)
+	await process_frame
+	await process_frame
+	var save_button_rect: Rect2 = (
+		main.pet_notes_save_button.get_global_rect()
+	)
+	var cancel_button_rect: Rect2 = (
+		main.pet_notes_cancel_button.get_global_rect()
+	)
+	_expect(
+		save_button_rect.end.y
+		<= main.pet_notes_settings_window.size.y - 10
+		and cancel_button_rect.end.y
+		<= main.pet_notes_settings_window.size.y - 10
+		and main.pet_notes_save_button.size.y >= 30
+		and main.pet_notes_cancel_button.size.y >= 30,
+		(
+			"long Calendar errors must grow Pet Notes while keeping "
+			+ "Save and Cancel fully visible "
+			+ "(window=%s save=%s cancel=%s)"
+			% [
+				main.pet_notes_settings_window.size,
+				save_button_rect,
+				cancel_button_rect,
+			]
+		)
+	)
+	main.google_calendar_status_label.text = (
+		main.google_calendar_status_label.text
+		+ " "
+		+ "Additional diagnostic details ".repeat(12)
+	)
+	main._queue_pet_notes_window_resize()
+	await process_frame
+	await process_frame
+	_expect(
+		main.pet_notes_settings_window.size.y > 310
+		and main.pet_notes_settings_window.size.y <= 520,
+		(
+			"Pet Notes must grow within its height cap when status "
+			+ "content needs substantially more lines "
+			+ "(window=%s measured=%s baseline=%s label_width=%s)"
+			% [
+				main.pet_notes_settings_window.size,
+				main._wrapped_label_height(
+					main.google_calendar_status_label,
+					34,
+					356
+				),
+				main.pet_notes_base_status_height,
+				main.google_calendar_status_label.size.x,
+			]
+		)
+	)
+	main.google_calendar_status_label.text += (
+		"More diagnostic context ".repeat(60)
+	)
+	main._queue_pet_notes_window_resize()
+	await process_frame
+	await process_frame
+	save_button_rect = main.pet_notes_save_button.get_global_rect()
+	cancel_button_rect = main.pet_notes_cancel_button.get_global_rect()
+	_expect(
+		main.pet_notes_settings_window.size.y == 520
+		and main.pet_notes_scroll.get_v_scroll_bar().visible
+		and save_button_rect.end.y
+		<= main.pet_notes_settings_window.size.y - 10
+		and cancel_button_rect.end.y
+		<= main.pet_notes_settings_window.size.y - 10,
+		(
+			"overflowing Pet Notes content must scroll at the height "
+			+ "cap without moving the footer buttons out of view"
+		)
+	)
+	main.google_calendar_provider._set_state(
+		main.GoogleCalendarProviderScript.State.DISCONNECTED,
+		""
+	)
+	await process_frame
+	await process_frame
+	_expect(
+		main.pet_notes_settings_window.size == Vector2i(420, 310),
+		"Pet Notes must shrink back after the long status is cleared"
 	)
 	_expect(
 		main.pet_notes_enabled_check.has_theme_icon_override("unchecked")
@@ -116,6 +211,38 @@ func _run() -> void:
 		and not main.notification_panel.visible,
 		"OK must close the passive card immediately"
 	)
+
+	main.check_in_manager.enqueue_card(
+		"integration-long",
+		"calendar",
+		(
+			"A very long calendar title and description that keeps "
+			+ "going so the passive note needs several wrapped lines "
+			+ "without ever pushing its countdown button outside the "
+			+ "fixed pet bubble."
+		),
+		10
+	)
+	main._try_show_check_in()
+	await process_frame
+	var ambient_button_rect: Rect2 = (
+		main.notification_done_button.get_global_rect()
+	)
+	var ambient_panel_rect := Rect2(
+		main.notification_panel.position,
+		main.notification_panel.size
+	)
+	_expect(
+		main.notification_label.max_lines_visible == 3
+		and main.notification_label.text_overrun_behavior
+		== TextServer.OVERRUN_TRIM_ELLIPSIS
+		and ambient_panel_rect.encloses(ambient_button_rect),
+		(
+			"long passive notes must trim to three lines while keeping "
+			+ "the countdown button inside the bubble"
+		)
+	)
+	main.notification_done_button.pressed.emit()
 
 	main.check_in_manager.enqueue_card(
 		"integration-2",

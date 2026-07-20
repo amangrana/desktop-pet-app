@@ -32,12 +32,17 @@ func _run() -> void:
 	_expect(
 		AppLocalizationScript.normalize("zh_TW")
 		== AppLocalizationScript.CHINESE,
-		"Chinese system locales must select the Chinese interface"
+		"Chinese locale codes must normalize to the Chinese interface"
 	)
 	_expect(
 		AppLocalizationScript.normalize("en_CA")
 		== AppLocalizationScript.ENGLISH,
 		"non-Chinese locales must select English"
+	)
+	_expect(
+		AppLocalizationScript.normalize("")
+		== AppLocalizationScript.ENGLISH,
+		"missing locale information must default to English"
 	)
 	_expect(
 		AppLocalizationScript.text(
