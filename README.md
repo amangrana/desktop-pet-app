@@ -162,7 +162,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 - `Settings` → `Language…`：打开独立语言选择窗口；首次安装跟随 Windows 系统语言，无法识别时回退 English；当前支持 English 和简体中文，选择会在重启后恢复
 - `Settings` → `Pet Notes…`：设置非专注时的宠物小纸条，并连接、同步或断开用户自己的 Google Calendar
 - Google Calendar 登录在系统浏览器完成，只申请日历列表与事件只读权限；同步层计划每 15 分钟刷新未来三天事件
-- Google Calendar 使用内置 Desktop OAuth client ID 与 PKCE；当前 Google 客户端在 token 交换时仍要求 client secret，因此 Godot 编辑器开发环境需要项目根目录中被 Git 忽略的 `client_secret*.json`。免配置的正式发行登录仍需改用安全的 token broker 或经实测支持无 secret PKCE 的生产客户端
+- Google Calendar 使用 Desktop OAuth client、PKCE、随机 `state` 和 loopback 回调；该 Desktop client 的 token 交换要求其配套 client secret
+- Godot 编辑器开发环境从项目根目录中被 Git 忽略的 `client_secret*.json` 加载配置；正式 Windows 导出通过插件把同一 Installed client 配置注入发行包，普通用户无需复制 JSON
+- Google 明确说明 Installed/Desktop 应用无法保密，随应用提供的 client secret 不被视为机密；仓库仍不提交明文值，正式构建从本地 JSON 或 CI 进程环境变量读取，以减少误提交和自动扫描风险
 - 时间、语言和 Pet Notes 设置窗口会随说明文字自动调整高度；内容超过屏幕可用空间时正文区域滚动，底部操作按钮始终保留在窗口内
 - 宠物图片上的提醒和 Pet Note 对话气泡限制最大文本行数，过长内容以省略号裁切，不会把操作按钮挤出气泡
 - refresh token 安全保存在当前 Windows 用户的凭据管理器中，重启后自动恢复登录；access token 仍只保存在进程内存。主动断开时会先持久禁止自动恢复，再删除已保存登录，因此立即退出也不会在下次启动重新连接
@@ -199,6 +201,9 @@ src/checkins/calendar_check_in_source.gd
                                   定时/全天日历事件的小纸条触发
 src/checkins/google_calendar_provider.gd
                                   Google Desktop OAuth、只读同步与事件标准化
+src/checkins/google_oauth_client_config.gd
+                                  OAuth 发行配置校验、固定 client ID 与注入路径
+addons/google_oauth_export/       Windows 导出时注入 Installed client 配置
 assets/ui/tray_icon.svg           Windows 通知区域托盘图标
 platform/windows/activity_helper/ActivityHelper.cs
                                   Windows Raw Input helper 源码
@@ -212,6 +217,8 @@ platform/windows/credential_helper/CredentialHelper.cs
                                   Windows Credential Manager helper 源码
 platform/windows/credential_helper/DesktopPetCredentialHelper.exe
                                   开发运行所需的 x64 凭据 helper
+platform/windows/export_release.ps1
+                                  注入 OAuth 配置并导出正式 Windows EXE
 src/pets/pet_definition.gd        宠物资源格式
 src/pets/pet_registry.gd          自动发现、校验和排序宠物包
 src/pets/pet_visual.gd            所有宠物共用的显示与基础动作
@@ -247,6 +254,8 @@ tests/system_tray_integration_test.gd
                                   任务栏隐藏、托盘菜单和显示/隐藏行为自测
 tests/windows_transparency_configuration_test.gd
                                   Windows 透明窗口与 ANGLE 回退配置自测
+tests/google_oauth_packaged_config_test.gd
+                                  对导出包内 OAuth 注入配置做黑盒自检
 ```
 
 ## 添加新宠物
@@ -261,6 +270,21 @@ tests/windows_transparency_configuration_test.gd
 
 完整字段和验收要求见 `docs/宠物资源包规范.md`。
 
+## 导出带 Google Calendar 的 Windows 版本
+
+1. 为 Godot 4.7.1 安装版本完全一致的 Windows export templates。
+2. 将 Installed/Desktop OAuth JSON 保留为项目根目录下被 Git 忽略的 `client_secret*.json`。
+3. 运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\platform\windows\export_release.ps1
+```
+
+脚本会校验固定 client ID，通过进程环境把 client 配置交给 Godot 导出插件，并生成 `dist\DesktopPet.exe`。原始 JSON 不会进入发行包；插件只加入运行所需的规范化 `client_id` 与 `client_secret`。CI 可改用 `DESKTOP_PET_GOOGLE_CLIENT_ID` 和 `DESKTOP_PET_GOOGLE_CLIENT_SECRET` 两个受保护环境变量，不需要创建 JSON。
+
+如果发行配置缺失或 client ID 不匹配，应用会在打开浏览器前显示配置错误。不要把 Desktop client secret 当作用户数据或访问令牌：它随 Installed 应用分发且可被提取；真正能访问个人日历的是每位用户授权后生成并保存于其 Windows 凭据管理器中的 refresh token。
+
 ## 当前原型的已知限制
 
 - 只面向 Windows 11 验证。
@@ -269,7 +293,7 @@ tests/windows_transparency_configuration_test.gd
 - 真实键鼠活动仍需要在不同键盘、鼠标和长时间运行场景下继续实机验收。
 - 番茄钟支持自定义专注和休息默认分钟数；尚无自动连续阶段、声音或专注历史。
 - 健康提醒支持自定义喝水、站立和延后分钟数以及勿扰时段；尚无声音、Windows 系统通知或完整的多分类设置页。
-- 宠物小纸条已完成 Google Calendar OAuth、只读同步和 Windows Credential Manager 持久登录；默认使用内置 Desktop client ID、PKCE 和无 secret 的公共客户端 token 交换，编辑器开发环境仍可用被 Git 忽略的本地 JSON 覆盖配置。正式公开发行前仍需建立独立生产 OAuth 项目并完成 Google 验证。
+- 宠物小纸条已完成 Google Calendar OAuth、只读同步和 Windows Credential Manager 持久登录；编辑器使用被 Git 忽略的本地 JSON，正式 Windows 发行包在导出阶段注入 Desktop client 配置。公开发布前仍需完成 Google OAuth 应用验证，并在独立电脑上验收导出包登录。
 - 当前只提供 English 和简体中文；宠物名称仍使用宠物包中定义的专名。
 - 鼠标穿透区域是简化多边形，不是逐像素轮廓。
 - 系统托盘第一阶段已完成；完整的计时与待处理提醒“活动托盘”仍未实现。

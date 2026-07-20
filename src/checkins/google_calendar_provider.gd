@@ -34,6 +34,7 @@ var status_message := ""
 var account_label := ""
 
 var _client_secret := ""
+var _client_secret_required := false
 var _callback_server: TCPServer
 var _callback_peer: StreamPeerTCP
 var _callback_request_buffer := ""
@@ -71,19 +72,24 @@ func _ready() -> void:
 
 func configure(
 	oauth_client_id: String,
-	oauth_client_secret: String = ""
+	oauth_client_secret: String = "",
+	require_client_secret := false
 ) -> void:
 	client_id = oauth_client_id.strip_edges()
 	_client_secret = oauth_client_secret.strip_edges()
+	_client_secret_required = require_client_secret
 
 
-func load_client_credentials(path: String) -> bool:
+func load_client_credentials(
+	path: String,
+	allow_client_id_override := false
+) -> bool:
 	if not FileAccess.file_exists(path):
 		return false
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if not parsed is Dictionary:
 		return false
-	return _apply_client_credentials(parsed, true)
+	return _apply_client_credentials(parsed, allow_client_id_override)
 
 
 func has_client_secret() -> bool:
@@ -93,6 +99,9 @@ func has_client_secret() -> bool:
 func connect_account() -> bool:
 	if client_id.is_empty():
 		_set_state(State.ERROR, "missing_client_id")
+		return false
+	if _client_secret_required and _client_secret.is_empty():
+		_set_state(State.ERROR, "missing_client_secret")
 		return false
 	_stop_callback_server()
 	_callback_server = TCPServer.new()
@@ -629,7 +638,11 @@ func _apply_client_credentials(
 		and loaded_client_id != client_id
 	):
 		return false
-	configure(loaded_client_id, loaded_client_secret)
+	configure(
+		loaded_client_id,
+		loaded_client_secret,
+		_client_secret_required
+	)
 	return true
 
 

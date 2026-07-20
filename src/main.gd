@@ -29,6 +29,9 @@ const CalendarCheckInSourceScript := preload(
 const GoogleCalendarProviderScript := preload(
 	"res://src/checkins/google_calendar_provider.gd"
 )
+const GoogleOAuthClientConfigScript := preload(
+	"res://src/checkins/google_oauth_client_config.gd"
+)
 const CHECKBOX_UNCHECKED_ICON_PATH := (
 	"res://assets/ui/checkbox_unchecked.svg"
 )
@@ -44,8 +47,7 @@ const DEV_BREAK_DURATION_SECONDS := 1
 const AUTO_BREAK_DELAY_SECONDS := 5.0
 const AUTO_TRANSITION_LATE_GRACE_SECONDS := 2.0
 const GOOGLE_CALENDAR_CLIENT_ID := (
-	"1096439647356-f00etpkkj8g3chtcm7vq6qu75m08j18f"
-	+ ".apps.googleusercontent.com"
+	GoogleOAuthClientConfigScript.DEFAULT_CLIENT_ID
 )
 const GOOGLE_CALENDAR_CREDENTIAL_PREFIX := "client_secret"
 const DURATION_SETTINGS_WINDOW_SIZE := Vector2i(430, 390)
@@ -329,7 +331,12 @@ func _build_check_in_pipeline() -> void:
 	add_child(calendar_check_in_source)
 
 	google_calendar_provider = GoogleCalendarProviderScript.new()
-	google_calendar_provider.configure(GOOGLE_CALENDAR_CLIENT_ID)
+	google_calendar_provider.configure(
+		GOOGLE_CALENDAR_CLIENT_ID,
+		"",
+		true
+	)
+	_load_packaged_google_calendar_credentials()
 	_load_local_google_calendar_credentials()
 	google_calendar_provider.state_changed.connect(
 		_handle_google_calendar_state_changed
@@ -378,10 +385,23 @@ func _load_local_google_calendar_credentials() -> void:
 			filename.begins_with(GOOGLE_CALENDAR_CREDENTIAL_PREFIX)
 			and filename.ends_with(".json")
 			and google_calendar_provider.load_client_credentials(
-				"res://%s" % filename
+				"res://%s" % filename,
+				true
 			)
 		):
 			return
+
+
+func _load_packaged_google_calendar_credentials() -> void:
+	if not FileAccess.file_exists(
+		GoogleOAuthClientConfigScript.RELEASE_CONFIG_PATH
+	):
+		return
+	if not google_calendar_provider.load_client_credentials(
+		GoogleOAuthClientConfigScript.RELEASE_CONFIG_PATH,
+		false
+	):
+		push_warning("Packaged Google OAuth client configuration is invalid.")
 
 
 func _restore_google_calendar_credential() -> void:

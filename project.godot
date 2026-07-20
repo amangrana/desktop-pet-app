@@ -21,6 +21,10 @@ window/size/transparent=true
 window/size/always_on_top=true
 window/per_pixel_transparency/allowed=true
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/google_oauth_export/plugin.cfg")
+
 [debug]
 
 file_logging/enable_file_logging=false
