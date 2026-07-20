@@ -56,6 +56,11 @@ const GOOGLE_CALENDAR_CLIENT_ID := (
 const GOOGLE_CALENDAR_CREDENTIAL_PREFIX := "client_secret"
 const DURATION_SETTINGS_WINDOW_SIZE := Vector2i(430, 390)
 const DURATION_SETTINGS_WINDOW_MAX_HEIGHT := 600
+const QUIET_SETTINGS_WINDOW_SIZE := Vector2i(410, 330)
+const QUIET_HOUR_POPUP_LOGICAL_WIDTH := 220
+const QUIET_HOUR_POPUP_LOGICAL_HEIGHT := 240
+const QUIET_STATUS_ACTIVE_COLOR := Color("#72C990")
+const QUIET_STATUS_INACTIVE_COLOR := Color("#8E8795")
 const LANGUAGE_SETTINGS_WINDOW_SIZE := Vector2i(390, 250)
 const LANGUAGE_SETTINGS_WINDOW_MAX_HEIGHT := 480
 const PET_NOTES_WINDOW_SIZE := Vector2i(420, 310)
@@ -64,12 +69,6 @@ const SETTINGS_WINDOW_SCREEN_MARGIN := 32
 const MENU_FONT_SIZE_MIN := 14
 const MENU_FONT_SIZE_BASE := 16
 const MENU_FONT_SIZE_MAX := 32
-const QUIET_HOURS_PRESETS := [
-	Vector2i(-1, -1),
-	Vector2i(22, 8),
-	Vector2i(23, 8),
-	Vector2i(0, 8),
-]
 const LANGUAGE_OPTIONS := [
 	{"code": "en", "label_key": "language_english"},
 	{"code": "zh_CN", "label_key": "language_chinese"},
@@ -158,6 +157,18 @@ var duration_field_labels: Dictionary = {}
 var duration_reset_button: Button
 var duration_save_button: Button
 var duration_cancel_button: Button
+var quiet_settings_window: Window
+var quiet_settings_title: Label
+var quiet_settings_note: Label
+var quiet_enabled_check: CheckBox
+var quiet_start_label: Label
+var quiet_end_label: Label
+var quiet_start_option: OptionButton
+var quiet_end_option: OptionButton
+var quiet_validation_label: Label
+var quiet_save_button: Button
+var quiet_cancel_button: Button
+var quiet_status_icon: Texture2D
 var language_settings_window: Window
 var language_settings_content: VBoxContainer
 var language_settings_scroll: ScrollContainer
@@ -271,6 +282,7 @@ func _ready() -> void:
 	_configure_window()
 	_build_hud()
 	_build_duration_settings_window()
+	_build_quiet_settings_window()
 	_build_language_settings_window()
 	_build_pet_notes_settings_window()
 	_build_context_menu()
@@ -944,6 +956,261 @@ func _resize_duration_settings_window() -> void:
 		DURATION_SETTINGS_WINDOW_MAX_HEIGHT,
 		maxi(0, note_height - duration_settings_base_note_height)
 	)
+
+
+func _build_quiet_settings_window() -> void:
+	quiet_settings_window = Window.new()
+	quiet_settings_window.name = "QuietHoursSettingsWindow"
+	quiet_settings_window.size = QUIET_SETTINGS_WINDOW_SIZE
+	quiet_settings_window.min_size = Vector2i(370, 300)
+	quiet_settings_window.unresizable = true
+	quiet_settings_window.transient = true
+	quiet_settings_window.exclusive = true
+	quiet_settings_window.visible = false
+	quiet_settings_window.close_requested.connect(
+		quiet_settings_window.hide
+	)
+	add_child(quiet_settings_window)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	quiet_settings_window.add_child(margin)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 12)
+	margin.add_child(content)
+
+	quiet_settings_title = Label.new()
+	quiet_settings_title.add_theme_font_size_override("font_size", 20)
+	content.add_child(quiet_settings_title)
+
+	quiet_settings_note = Label.new()
+	quiet_settings_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	quiet_settings_note.custom_minimum_size = Vector2(0, 48)
+	content.add_child(quiet_settings_note)
+
+	quiet_enabled_check = CheckBox.new()
+	quiet_enabled_check.focus_mode = Control.FOCUS_NONE
+	_style_settings_checkbox(quiet_enabled_check)
+	quiet_enabled_check.toggled.connect(
+		_handle_quiet_enabled_toggled
+	)
+	content.add_child(quiet_enabled_check)
+
+	var fields := GridContainer.new()
+	fields.columns = 2
+	fields.add_theme_constant_override("h_separation", 16)
+	fields.add_theme_constant_override("v_separation", 9)
+	content.add_child(fields)
+
+	quiet_start_label = Label.new()
+	quiet_start_label.custom_minimum_size = Vector2(160, 32)
+	quiet_start_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fields.add_child(quiet_start_label)
+
+	quiet_start_option = _create_quiet_hour_option()
+	quiet_start_option.item_selected.connect(
+		_handle_quiet_hour_selected
+	)
+	fields.add_child(quiet_start_option)
+
+	quiet_end_label = Label.new()
+	quiet_end_label.custom_minimum_size = Vector2(160, 32)
+	quiet_end_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fields.add_child(quiet_end_label)
+
+	quiet_end_option = _create_quiet_hour_option()
+	quiet_end_option.item_selected.connect(
+		_handle_quiet_hour_selected
+	)
+	fields.add_child(quiet_end_option)
+
+	quiet_validation_label = Label.new()
+	quiet_validation_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	quiet_validation_label.add_theme_color_override(
+		"font_color",
+		Color("#C96D76")
+	)
+	content.add_child(quiet_validation_label)
+
+	var footer := HBoxContainer.new()
+	footer.alignment = BoxContainer.ALIGNMENT_END
+	footer.add_theme_constant_override("separation", 8)
+	content.add_child(footer)
+
+	quiet_cancel_button = Button.new()
+	quiet_cancel_button.focus_mode = Control.FOCUS_NONE
+	quiet_cancel_button.pressed.connect(quiet_settings_window.hide)
+	footer.add_child(quiet_cancel_button)
+
+	quiet_save_button = Button.new()
+	quiet_save_button.focus_mode = Control.FOCUS_NONE
+	quiet_save_button.pressed.connect(_save_quiet_settings)
+	footer.add_child(quiet_save_button)
+	_refresh_quiet_settings_texts()
+
+
+func _create_quiet_hour_option() -> OptionButton:
+	var option := OptionButton.new()
+	option.focus_mode = Control.FOCUS_NONE
+	option.custom_minimum_size = Vector2(150, 32)
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for hour in 24:
+		option.add_item("%02d:00" % hour)
+		option.set_item_metadata(option.item_count - 1, hour)
+	var popup := option.get_popup()
+	# PopupMenu normally grows to fit every item. Disable that automatic
+	# wrapping so our fixed height produces the built-in scroll container.
+	popup.wrap_controls = false
+	popup.about_to_popup.connect(
+		_prepare_quiet_hour_popup.bind(option)
+	)
+	popup.visibility_changed.connect(
+		_handle_quiet_hour_popup_visibility_changed.bind(option)
+	)
+	return option
+
+
+func _handle_quiet_hour_popup_visibility_changed(option: OptionButton) -> void:
+	if option.get_popup().visible:
+		_prepare_quiet_hour_popup.call_deferred(option)
+
+
+func _prepare_quiet_hour_popup(option: OptionButton) -> void:
+	var popup := option.get_popup()
+	var scale := _current_settings_window_scale(
+		quiet_settings_window,
+		QUIET_SETTINGS_WINDOW_SIZE
+	)
+	var usable_rect := DisplayServer.screen_get_usable_rect(
+		_settings_window_screen(quiet_settings_window)
+	)
+	var target_height := roundi(
+		QUIET_HOUR_POPUP_LOGICAL_HEIGHT * scale
+	)
+	var available_height := maxi(
+		roundi(140.0 * scale),
+		usable_rect.size.y - SETTINGS_WINDOW_SCREEN_MARGIN * 2
+	)
+	var popup_height := mini(target_height, available_height)
+	var popup_width := maxi(
+		roundi(option.size.x * scale),
+		roundi(QUIET_HOUR_POPUP_LOGICAL_WIDTH * scale)
+	)
+	popup.min_size = Vector2i(popup_width, popup_height)
+	popup.max_size = Vector2i(popup_width, popup_height)
+	popup.size = Vector2i(popup_width, popup_height)
+	if option.selected >= 0:
+		popup.scroll_to_item(option.selected)
+
+
+func _open_quiet_settings() -> void:
+	_set_pet_window_visible(true)
+	quiet_enabled_check.button_pressed = (
+		reminder_manager.quiet_hours_enabled()
+	)
+	_select_quiet_hour(
+		quiet_start_option,
+		reminder_manager.quiet_start_hour()
+	)
+	_select_quiet_hour(
+		quiet_end_option,
+		reminder_manager.quiet_end_hour()
+	)
+	_update_quiet_settings_form()
+	_popup_scaled_settings_window(
+		quiet_settings_window,
+		QUIET_SETTINGS_WINDOW_SIZE
+	)
+	_prepare_quiet_hour_popup(quiet_start_option)
+	_prepare_quiet_hour_popup(quiet_end_option)
+
+
+func _select_quiet_hour(option: OptionButton, hour: int) -> void:
+	for index in option.item_count:
+		if int(option.get_item_metadata(index)) == hour:
+			option.select(index)
+			return
+
+
+func _handle_quiet_enabled_toggled(_enabled: bool) -> void:
+	_update_quiet_settings_form()
+
+
+func _handle_quiet_hour_selected(_index: int) -> void:
+	_update_quiet_settings_form()
+
+
+func _update_quiet_settings_form() -> void:
+	if quiet_enabled_check == null:
+		return
+	var enabled := quiet_enabled_check.button_pressed
+	quiet_start_option.disabled = not enabled
+	quiet_end_option.disabled = not enabled
+	var same_time := (
+		_quiet_option_hour(quiet_start_option)
+		== _quiet_option_hour(quiet_end_option)
+	)
+	quiet_validation_label.visible = enabled and same_time
+	quiet_save_button.disabled = enabled and same_time
+
+
+func _quiet_option_hour(option: OptionButton) -> int:
+	if option.selected < 0:
+		return 0
+	return int(option.get_item_metadata(option.selected))
+
+
+func _save_quiet_settings() -> void:
+	var enabled := quiet_enabled_check.button_pressed
+	var start_hour := _quiet_option_hour(quiet_start_option)
+	var end_hour := _quiet_option_hour(quiet_end_option)
+	if enabled and start_hour == end_hour:
+		_update_quiet_settings_form()
+		return
+
+	quiet_settings_window.hide()
+	var changed: bool = reminder_manager.set_quiet_hours(
+		enabled,
+		start_hour,
+		end_hour
+	)
+	_update_reminder_menu()
+	_save_settings()
+	if not changed:
+		return
+	if enabled:
+		_show_notification(
+			_text("quiet_hours_updated", [start_hour, end_hour]),
+			INFORMATION_NOTIFICATION_SECONDS
+		)
+	elif reminder_manager.current_due_kind() != TimerManagerScript.Kind.NONE:
+		if not notification_panel.visible:
+			_show_pending_health_reminder()
+	else:
+		_show_notification(
+			_text("quiet_hours_disabled"),
+			INFORMATION_NOTIFICATION_SECONDS
+		)
+
+
+func _refresh_quiet_settings_texts() -> void:
+	if quiet_settings_window == null:
+		return
+	quiet_settings_window.title = _text("quiet_settings_window_title")
+	quiet_settings_title.text = _text("quiet_settings_heading")
+	quiet_settings_note.text = _text("quiet_settings_note")
+	quiet_enabled_check.text = _text("quiet_settings_enabled")
+	quiet_start_label.text = _text("quiet_settings_start")
+	quiet_end_label.text = _text("quiet_settings_end")
+	quiet_validation_label.text = _text("quiet_settings_same_time")
+	quiet_cancel_button.text = _text("duration_cancel")
+	quiet_save_button.text = _text("duration_save")
+	_update_quiet_settings_form()
 
 
 func _build_language_settings_window() -> void:
@@ -1899,7 +2166,7 @@ func _build_context_menu() -> void:
 		MENU_STAND_REMINDER
 	)
 	reminder_menu.add_separator()
-	reminder_menu.add_item(
+	reminder_menu.add_check_item(
 		_quiet_hours_text(),
 		MENU_QUIET_HOURS
 	)
@@ -1960,6 +2227,10 @@ func _build_context_menu() -> void:
 	settings_menu.add_item(
 		_text("duration_settings_menu"),
 		MENU_DURATION_SETTINGS
+	)
+	settings_menu.add_check_item(
+		_text("quiet_settings_menu"),
+		MENU_QUIET_HOURS
 	)
 	settings_menu.add_item(
 		_text("language_settings_menu"),
@@ -2295,7 +2566,8 @@ func _handle_menu_item(id: int) -> void:
 			_open_duration_settings()
 			return
 		MENU_QUIET_HOURS:
-			_cycle_quiet_hours()
+			_open_quiet_settings()
+			return
 		MENU_COMPLETE_REMINDER:
 			_handle_complete_reminder()
 		MENU_SNOOZE_REMINDER:
@@ -2726,6 +2998,17 @@ func _update_reminder_menu() -> void:
 		MENU_QUIET_HOURS,
 		_quiet_hours_text()
 	)
+	_set_menu_checked(
+		reminder_menu,
+		MENU_QUIET_HOURS,
+		reminder_manager.quiet_hours_enabled()
+	)
+	_set_menu_checked(
+		settings_menu,
+		MENU_QUIET_HOURS,
+		reminder_manager.quiet_hours_enabled()
+	)
+	_update_quiet_hours_status_icon()
 
 	var due_kind: int = reminder_manager.current_due_kind()
 	var has_due := due_kind != TimerManagerScript.Kind.NONE
@@ -2838,6 +3121,52 @@ func _quiet_hours_text() -> String:
 		reminder_manager.quiet_start_hour(),
 		reminder_manager.quiet_end_hour(),
 	])
+
+
+func _update_quiet_hours_status_icon() -> void:
+	if reminder_menu == null:
+		return
+	var index := reminder_menu.get_item_index(MENU_QUIET_HOURS)
+	if index < 0:
+		return
+	if reminder_manager == null or not reminder_manager.quiet_hours_enabled():
+		reminder_menu.set_item_icon(index, null)
+		reminder_menu.set_item_tooltip(index, "")
+		return
+	if quiet_status_icon == null:
+		quiet_status_icon = _create_quiet_status_icon()
+	reminder_menu.set_item_icon(index, quiet_status_icon)
+	reminder_menu.set_item_icon_modulate(
+		index,
+		QUIET_STATUS_ACTIVE_COLOR
+		if reminder_manager.is_quiet_now()
+		else QUIET_STATUS_INACTIVE_COLOR
+	)
+	reminder_menu.set_item_tooltip(
+		index,
+		_text(
+			"quiet_hours_active_tooltip"
+			if reminder_manager.is_quiet_now()
+			else "quiet_hours_inactive_tooltip"
+		)
+	)
+
+
+func _create_quiet_status_icon() -> Texture2D:
+	var icon_size := 12
+	var center := Vector2(5.5, 5.5)
+	var image := Image.create(
+		icon_size,
+		icon_size,
+		false,
+		Image.FORMAT_RGBA8
+	)
+	image.fill(Color.TRANSPARENT)
+	for y in icon_size:
+		for x in icon_size:
+			if Vector2(x, y).distance_to(center) <= 4.5:
+				image.set_pixel(x, y, Color.WHITE)
+	return ImageTexture.create_from_image(image)
 
 
 func _format_setting_duration(duration_seconds: int) -> String:
@@ -3242,6 +3571,7 @@ func _try_show_check_in() -> bool:
 		!= TimerManagerScript.Kind.NONE
 		or notification_panel.visible
 		or duration_settings_window.visible
+		or quiet_settings_window.visible
 		or language_settings_window.visible
 		or pet_notes_settings_window.visible
 	):
@@ -3289,44 +3619,6 @@ func _toggle_reminder(kind: int) -> void:
 			_text(disabled_key),
 			INFORMATION_NOTIFICATION_SECONDS
 		)
-
-
-func _cycle_quiet_hours() -> void:
-	var current := Vector2i(-1, -1)
-	if reminder_manager.quiet_hours_enabled():
-		current = Vector2i(
-			reminder_manager.quiet_start_hour(),
-			reminder_manager.quiet_end_hour()
-		)
-	var current_index := QUIET_HOURS_PRESETS.find(current)
-	var next_index := (
-		0
-		if current_index < 0
-		else (current_index + 1) % QUIET_HOURS_PRESETS.size()
-	)
-	var next_hours: Vector2i = QUIET_HOURS_PRESETS[next_index]
-	var enabled := next_hours.x >= 0
-	var start_hour := 22 if not enabled else next_hours.x
-	var end_hour := 8 if not enabled else next_hours.y
-	if not reminder_manager.set_quiet_hours(
-		enabled,
-		start_hour,
-		end_hour
-	):
-		return
-	if enabled:
-		_show_notification(
-			_text("quiet_hours_updated", [start_hour, end_hour]),
-			INFORMATION_NOTIFICATION_SECONDS
-		)
-	else:
-		if reminder_manager.current_due_kind() != TimerManagerScript.Kind.NONE:
-			_show_pending_health_reminder()
-		else:
-			_show_notification(
-				_text("quiet_hours_disabled"),
-				INFORMATION_NOTIFICATION_SECONDS
-			)
 
 
 func _handle_complete_reminder() -> void:
@@ -3877,6 +4169,11 @@ func _refresh_localized_ui() -> void:
 	)
 	_set_menu_text(
 		settings_menu,
+		MENU_QUIET_HOURS,
+		_text("quiet_settings_menu")
+	)
+	_set_menu_text(
+		settings_menu,
 		MENU_LANGUAGE_SETTINGS,
 		_text("language_settings_menu")
 	)
@@ -3922,6 +4219,7 @@ func _refresh_localized_ui() -> void:
 			_text("developer")
 		)
 	_refresh_duration_settings_texts()
+	_refresh_quiet_settings_texts()
 	_refresh_language_settings_texts()
 	_refresh_pet_notes_settings_texts()
 	_refresh_notification_action_texts()

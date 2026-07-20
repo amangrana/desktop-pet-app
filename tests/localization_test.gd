@@ -73,6 +73,45 @@ func _run() -> void:
 	_expect(
 		AppLocalizationScript.text(
 			AppLocalizationScript.ENGLISH,
+			"duration_settings_menu"
+		) == "Set durations"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"duration_settings_menu"
+		) == "设置时长",
+		"duration settings menu must stay compact in both languages"
+	)
+	_expect(
+		AppLocalizationScript.text(
+			AppLocalizationScript.ENGLISH,
+			"quiet_settings_menu"
+		) == "Quiet hours…"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"quiet_settings_menu"
+		) == "设置勿扰时段…"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.ENGLISH,
+			"quiet_hours_range",
+			[22, 8]
+		) == "Quiet hours: 22:00–08:00"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"quiet_hours_range",
+			[22, 8]
+		) == "勿扰时段：22:00–08:00"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"quiet_hours_inactive_tooltip"
+		) == "当前不在勿扰时段内。",
+		(
+			"quiet-hours range and status tooltip must be compact and "
+			+ "available in both languages"
+		)
+	)
+	_expect(
+		AppLocalizationScript.text(
+			AppLocalizationScript.ENGLISH,
 			"bubble_turn_off"
 		) == "Turn off"
 		and AppLocalizationScript.text(
