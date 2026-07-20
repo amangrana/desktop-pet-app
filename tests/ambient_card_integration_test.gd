@@ -151,6 +151,22 @@ func _run() -> void:
 		),
 		"Pet Notes checkboxes must use visible high-contrast icons"
 	)
+	var unchecked_icon: Texture2D = (
+		main.pet_notes_enabled_check.get_theme_icon("unchecked")
+	)
+	var checked_icon: Texture2D = (
+		main.pet_notes_enabled_check.get_theme_icon("checked")
+	)
+	_expect(
+		unchecked_icon != null
+		and checked_icon != null
+		and unchecked_icon.get_size() == Vector2(24, 24)
+		and checked_icon.get_size() == Vector2(24, 24),
+		(
+			"Pet Notes checkbox icons must contain their imported pixels, "
+			+ "including in exported PCK builds"
+		)
+	)
 	_expect(
 		main.pet_notes_enabled_check.get_theme_color("font_color")
 		== Color.WHITE
@@ -162,7 +178,26 @@ func _run() -> void:
 		) >= 3,
 		"Pet Notes checkbox text must remain readable on dark backgrounds"
 	)
+	main.pet_notes_enabled_check.button_pressed = false
+	_expect(
+		main.calendar_notes_enabled_check.disabled
+		and main.google_calendar_connect_button.disabled
+		and main.pet_notes_calendar_card.modulate.a < 1.0,
+		(
+			"disabling Pet Notes must gray and disable every dependent "
+			+ "Calendar option"
+		)
+	)
 	main.pet_notes_enabled_check.button_pressed = true
+	_expect(
+		not main.calendar_notes_enabled_check.disabled
+		and not main.google_calendar_connect_button.disabled
+		and main.pet_notes_calendar_card.modulate == Color.WHITE,
+		(
+			"re-enabling Pet Notes must restore available Calendar "
+			+ "controls according to account state"
+		)
+	)
 	main.calendar_notes_enabled_check.button_pressed = true
 	main.pet_notes_save_button.pressed.emit()
 	main.check_in_manager.set_cooldown_seconds(0)

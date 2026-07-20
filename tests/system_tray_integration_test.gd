@@ -6,6 +6,7 @@ const MENU_TRAY_TOGGLE_PET := 8
 const MENU_START_FOCUS := 41
 const MENU_AMBIENT_CARDS := 59
 const MENU_EXIT := 90
+const MENU_SCALE_300 := 37
 
 var _failed := false
 
@@ -36,26 +37,43 @@ func _run() -> void:
 		FileAccess.file_exists("res://assets/ui/tray_icon.svg"),
 		"the Windows tray icon asset must exist"
 	)
+	var tray_icon: Texture2D = main._load_svg_texture(
+		"res://assets/ui/tray_icon.svg"
+	)
+	_expect(
+		tray_icon != null and tray_icon.get_size() == Vector2(64, 64),
+		(
+			"the Windows tray icon must load through the imported texture "
+			+ "path, including in exported PCK builds"
+		)
+	)
 	_expect(
 		main.windows_taskbar_adapter != null
 		and main.windows_taskbar_adapter.helper_exists(),
 		"the safe Windows taskbar button helper must be packaged"
 	)
-	main._apply_scale(1.5, false)
+	_expect(
+		main.window_menu.get_item_index(MENU_SCALE_300) >= 0,
+		"the Window menu must expose the 300% pet scale"
+	)
+	main._apply_scale(3.0, false)
 	var scaled_menus: Array[PopupMenu] = main._scalable_popup_menus()
 	var menus_scaled: bool = not scaled_menus.is_empty()
 	for menu in scaled_menus:
 		if (
-			menu.get_theme_font_size("font_size") != 20
-			or menu.get_theme_constant("v_separation") != 5
+			menu.get_theme_font_size("font_size") != 32
+			or menu.get_theme_constant("v_separation") != 8
 		):
 			menus_scaled = false
 			break
 	_expect(
 		menus_scaled
+		and main.settings.display_scale == 3.0
+		and main.get_window().size == Vector2i(1080, 1080)
 		and not main.tray_menu.has_theme_font_size_override("font_size"),
 		(
-			"150% pet scale must enlarge all Godot menus while the "
+			"300% pet scale must enlarge the pet window and all Godot "
+			+ "menus while the "
 			+ "native tray menu stays under Windows DPI control"
 		)
 	)
