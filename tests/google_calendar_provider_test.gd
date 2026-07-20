@@ -25,6 +25,41 @@ func _run() -> void:
 		and provider.has_client_secret(),
 		"Desktop OAuth credentials must load without exposing the secret"
 	)
+	var public_client = GoogleCalendarProviderScript.new()
+	root.add_child(public_client)
+	public_client.configure("built-in-client-id")
+	_expect(
+		public_client._apply_client_credentials(
+			{
+				"installed": {
+					"client_id": "development-client-id",
+				},
+			},
+			true
+		)
+		and public_client.client_id == "development-client-id"
+		and not public_client.has_client_secret(),
+		"Development credentials may override the built-in public client"
+	)
+	var public_token_fields := {
+		"client_id": public_client.client_id,
+		"code": "authorization-code",
+	}
+	public_client._add_optional_client_secret(public_token_fields)
+	_expect(
+		not public_token_fields.has("client_secret"),
+		"Public PKCE token requests must omit an empty client secret"
+	)
+	var confidential_token_fields := {
+		"client_id": provider.client_id,
+		"code": "authorization-code",
+	}
+	provider._add_optional_client_secret(confidential_token_fields)
+	_expect(
+		confidential_token_fields.get("client_secret", "")
+		== "local-development-secret",
+		"Development overrides must still attach a configured client secret"
+	)
 
 	var query: Dictionary = provider._parse_query(
 		"code=a%2Fb&state=test-state"
