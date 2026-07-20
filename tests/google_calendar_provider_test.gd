@@ -3,6 +3,9 @@ extends SceneTree
 const GoogleCalendarProviderScript := preload(
 	"res://src/checkins/google_calendar_provider.gd"
 )
+const GoogleOAuthClientConfigScript := preload(
+	"res://src/checkins/google_oauth_client_config.gd"
+)
 
 var _failed := false
 
@@ -12,6 +15,83 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var normalized_credentials: Dictionary = (
+		GoogleOAuthClientConfigScript.normalize_credentials(
+			{
+				"installed": {
+					"client_id": (
+						GoogleOAuthClientConfigScript.DEFAULT_CLIENT_ID
+					),
+					"client_secret": "release-client-value",
+				},
+			}
+		)
+	)
+	_expect(
+		not normalized_credentials.is_empty()
+		and str(
+			normalized_credentials.installed.client_secret
+		) == "release-client-value",
+		"release credentials must validate for the built-in Desktop client"
+	)
+	_expect(
+		GoogleOAuthClientConfigScript.normalize_credentials(
+			{
+				"installed": {
+					"client_id": "different-client-id",
+					"client_secret": "release-client-value",
+				},
+			}
+		).is_empty()
+		and GoogleOAuthClientConfigScript.normalize_credentials(
+			{
+				"installed": {
+					"client_id": (
+						GoogleOAuthClientConfigScript.DEFAULT_CLIENT_ID
+					),
+					"client_secret": "",
+				},
+			}
+		).is_empty(),
+		"release credentials must reject mismatched IDs and empty secrets"
+	)
+	var previous_environment_client_id := OS.get_environment(
+		GoogleOAuthClientConfigScript.CLIENT_ID_ENV
+	)
+	var previous_environment_client_secret := OS.get_environment(
+		GoogleOAuthClientConfigScript.CLIENT_SECRET_ENV
+	)
+	OS.set_environment(
+		GoogleOAuthClientConfigScript.CLIENT_ID_ENV,
+		GoogleOAuthClientConfigScript.DEFAULT_CLIENT_ID
+	)
+	OS.set_environment(
+		GoogleOAuthClientConfigScript.CLIENT_SECRET_ENV,
+		"export-plugin-test-value"
+	)
+	_expect(
+		not GoogleOAuthClientConfigScript.credentials_from_environment(
+		).is_empty(),
+		"release credentials must load from process-local CI values"
+	)
+	OS.set_environment(
+		GoogleOAuthClientConfigScript.CLIENT_ID_ENV,
+		"different-client-id"
+	)
+	_expect(
+		GoogleOAuthClientConfigScript.credentials_from_environment(
+		).is_empty(),
+		"release credentials must reject an unexpected CI client ID"
+	)
+	_restore_environment(
+		GoogleOAuthClientConfigScript.CLIENT_ID_ENV,
+		previous_environment_client_id
+	)
+	_restore_environment(
+		GoogleOAuthClientConfigScript.CLIENT_SECRET_ENV,
+		previous_environment_client_secret
+	)
+
 	var provider = GoogleCalendarProviderScript.new()
 	root.add_child(provider)
 	provider.configure("desktop-client-id")
@@ -59,6 +139,19 @@ func _run() -> void:
 		confidential_token_fields.get("client_secret", "")
 		== "local-development-secret",
 		"Development overrides must still attach a configured client secret"
+	)
+	var required_client = GoogleCalendarProviderScript.new()
+	root.add_child(required_client)
+	required_client.configure("desktop-client-id", "", true)
+	_expect(
+		not required_client.connect_account()
+		and required_client.state
+		== GoogleCalendarProviderScript.State.ERROR
+		and required_client.status_message == "missing_client_secret",
+		(
+			"a build missing its required Desktop client value must fail "
+			+ "before opening the browser"
+		)
 	)
 
 	var query: Dictionary = provider._parse_query(
@@ -181,3 +274,10 @@ func _expect(condition: bool, message: String) -> void:
 		return
 	_failed = true
 	push_error("Google Calendar provider self-test failed: %s" % message)
+
+
+func _restore_environment(name: String, value: String) -> void:
+	if value.is_empty():
+		OS.unset_environment(name)
+		return
+	OS.set_environment(name, value)
