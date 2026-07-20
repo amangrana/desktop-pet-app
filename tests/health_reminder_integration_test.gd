@@ -35,7 +35,6 @@ func _run() -> void:
 		main._settings_file_path() != main.SETTINGS_FILE,
 		"automated tests must not use the production settings file"
 	)
-
 	_expect(
 		main.context_menu.get_item_index(REMINDERS_SUBMENU_ID) >= 0,
 		"top-level menu must expose the reminders submenu"
@@ -90,8 +89,44 @@ func _run() -> void:
 	main._handle_menu_item(DURATION_SETTINGS_MENU_ID)
 	await process_frame
 	_expect(
-		main.duration_settings_window.visible,
+		main.duration_settings_window.visible
+		and main.duration_settings_window.size == Vector2i(430, 390)
+		and not main.duration_settings_scroll.get_v_scroll_bar().visible,
 		"duration settings menu must open a standalone window"
+	)
+	var original_duration_note: String = main.duration_settings_note.text
+	main.duration_settings_note.text += (
+		" Additional translated guidance".repeat(80)
+	)
+	main._queue_duration_settings_window_resize()
+	await process_frame
+	await process_frame
+	var duration_save_rect: Rect2 = (
+		main.duration_save_button.get_global_rect()
+	)
+	var duration_cancel_rect: Rect2 = (
+		main.duration_cancel_button.get_global_rect()
+	)
+	_expect(
+		main.duration_settings_window.size.y == 600
+		and main.duration_settings_scroll.get_v_scroll_bar().visible
+		and duration_save_rect.end.y
+		<= main.duration_settings_window.size.y - 18
+		and duration_cancel_rect.end.y
+		<= main.duration_settings_window.size.y - 18,
+		(
+			"long duration guidance must scroll while Save and Cancel "
+			+ "remain fully visible"
+		)
+	)
+	main.duration_settings_note.text = original_duration_note
+	main._queue_duration_settings_window_resize()
+	await process_frame
+	await process_frame
+	_expect(
+		main.duration_settings_window.size == Vector2i(430, 390)
+		and not main.duration_settings_scroll.get_v_scroll_bar().visible,
+		"duration settings must shrink after long guidance is cleared"
 	)
 	main.duration_spin_boxes["focus"].get_line_edit().grab_focus()
 	main.duration_spin_boxes["focus"].get_line_edit().text = "39"
@@ -312,8 +347,44 @@ func _run() -> void:
 	await process_frame
 	_expect(
 		main.language_settings_window.visible
-		and main.language_option_button.item_count == 2,
+		and main.language_option_button.item_count == 2
+		and main.language_settings_window.size == Vector2i(390, 250)
+		and not main.language_settings_scroll.get_v_scroll_bar().visible,
 		"language entry must open a standalone language picker"
+	)
+	var original_language_note: String = main.language_settings_note.text
+	main.language_settings_note.text += (
+		" Additional localization guidance".repeat(80)
+	)
+	main._queue_language_settings_window_resize()
+	await process_frame
+	await process_frame
+	var language_save_rect: Rect2 = (
+		main.language_save_button.get_global_rect()
+	)
+	var language_cancel_rect: Rect2 = (
+		main.language_cancel_button.get_global_rect()
+	)
+	_expect(
+		main.language_settings_window.size.y == 480
+		and main.language_settings_scroll.get_v_scroll_bar().visible
+		and language_save_rect.end.y
+		<= main.language_settings_window.size.y - 18
+		and language_cancel_rect.end.y
+		<= main.language_settings_window.size.y - 18,
+		(
+			"long language guidance must scroll while Save and Cancel "
+			+ "remain fully visible"
+		)
+	)
+	main.language_settings_note.text = original_language_note
+	main._queue_language_settings_window_resize()
+	await process_frame
+	await process_frame
+	_expect(
+		main.language_settings_window.size == Vector2i(390, 250)
+		and not main.language_settings_scroll.get_v_scroll_bar().visible,
+		"language settings must shrink after long guidance is cleared"
 	)
 	main.language_option_button.select(1)
 	main.language_save_button.pressed.emit()

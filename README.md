@@ -159,10 +159,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 - `Done` 表示本次已完成，`Skip this time` 表示本次未完成但忽略；两者都会开始下一个正常周期。`Turn off ... reminders` 会停止该类周期，直到在 `Reminders` 菜单重新开启
 - 提醒气泡自动收起后，左键短按宠物可再次打开当前待处理提醒
 - `Developer` 子菜单中的喝水和站立 `1 sec (test)`：快速验证两种健康提醒；正式导出时隐藏
-- `Settings` → `Language…`：打开独立语言选择窗口；当前支持 English 和简体中文，选择会在重启后恢复
+- `Settings` → `Language…`：打开独立语言选择窗口；首次安装跟随 Windows 系统语言，无法识别时回退 English；当前支持 English 和简体中文，选择会在重启后恢复
 - `Settings` → `Pet Notes…`：设置非专注时的宠物小纸条，并连接、同步或断开用户自己的 Google Calendar
 - Google Calendar 登录在系统浏览器完成，只申请日历列表与事件只读权限；同步层计划每 15 分钟刷新未来三天事件
-- Google Calendar 默认使用内置 Desktop OAuth client ID 与 PKCE，不要求用户复制 OAuth JSON；在 Godot 编辑器中运行时，可用项目根目录中被 Git 忽略的 `client_secret*.json` 覆盖客户端配置
+- Google Calendar 使用内置 Desktop OAuth client ID 与 PKCE；当前 Google 客户端在 token 交换时仍要求 client secret，因此 Godot 编辑器开发环境需要项目根目录中被 Git 忽略的 `client_secret*.json`。免配置的正式发行登录仍需改用安全的 token broker 或经实测支持无 secret PKCE 的生产客户端
+- 时间、语言和 Pet Notes 设置窗口会随说明文字自动调整高度；内容超过屏幕可用空间时正文区域滚动，底部操作按钮始终保留在窗口内
+- 宠物图片上的提醒和 Pet Note 对话气泡限制最大文本行数，过长内容以省略号裁切，不会把操作按钮挤出气泡
 - refresh token 安全保存在当前 Windows 用户的凭据管理器中，重启后自动恢复登录；access token 仍只保存在进程内存。主动断开时会先持久禁止自动恢复，再删除已保存登录，因此立即退出也不会在下次启动重新连接
 - `Developer` → `Pet Note — 10 sec (test)`：验证图片内小纸条、按钮倒计时和自动关闭
 - 程序在 Windows 通知区域显示托盘图标；托盘菜单可显示/隐藏宠物、开始专注、打开 Pet Notes 或退出

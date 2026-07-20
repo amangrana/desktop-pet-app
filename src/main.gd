@@ -48,7 +48,13 @@ const GOOGLE_CALENDAR_CLIENT_ID := (
 	+ ".apps.googleusercontent.com"
 )
 const GOOGLE_CALENDAR_CREDENTIAL_PREFIX := "client_secret"
+const DURATION_SETTINGS_WINDOW_SIZE := Vector2i(430, 390)
+const DURATION_SETTINGS_WINDOW_MAX_HEIGHT := 600
+const LANGUAGE_SETTINGS_WINDOW_SIZE := Vector2i(390, 250)
+const LANGUAGE_SETTINGS_WINDOW_MAX_HEIGHT := 480
 const PET_NOTES_WINDOW_SIZE := Vector2i(420, 310)
+const PET_NOTES_WINDOW_MAX_HEIGHT := 520
+const SETTINGS_WINDOW_SCREEN_MARGIN := 32
 const MENU_FONT_SIZE_MIN := 14
 const MENU_FONT_SIZE_BASE := 16
 const MENU_FONT_SIZE_MAX := 20
@@ -135,6 +141,10 @@ var notification_snooze_button: Button
 var notification_more_button: Button
 var reminder_action_menu: PopupMenu
 var duration_settings_window: Window
+var duration_settings_content: VBoxContainer
+var duration_settings_scroll: ScrollContainer
+var duration_settings_scroll_content: VBoxContainer
+var duration_settings_footer: HBoxContainer
 var duration_settings_title: Label
 var duration_settings_note: Label
 var duration_spin_boxes: Dictionary = {}
@@ -143,6 +153,10 @@ var duration_reset_button: Button
 var duration_save_button: Button
 var duration_cancel_button: Button
 var language_settings_window: Window
+var language_settings_content: VBoxContainer
+var language_settings_scroll: ScrollContainer
+var language_settings_scroll_content: VBoxContainer
+var language_settings_footer: HBoxContainer
 var language_settings_title: Label
 var language_settings_note: Label
 var language_settings_label: Label
@@ -151,6 +165,10 @@ var language_save_button: Button
 var language_cancel_button: Button
 var pet_notes_settings_window: Window
 var pet_notes_background: ColorRect
+var pet_notes_content: VBoxContainer
+var pet_notes_scroll: ScrollContainer
+var pet_notes_scroll_content: VBoxContainer
+var pet_notes_footer: HBoxContainer
 var pet_notes_master_card: PanelContainer
 var pet_notes_calendar_card: PanelContainer
 var pet_notes_settings_title: Label
@@ -194,7 +212,7 @@ var settings := {
 	"ambient_cards_enabled": false,
 	"calendar_notes_enabled": false,
 	"google_calendar_explicitly_disconnected": false,
-	"language": "",
+	"language": AppLocalizationScript.ENGLISH,
 	"has_saved_position": false,
 	"window_position": Vector2i.ZERO,
 }
@@ -219,6 +237,13 @@ var google_calendar_credential_saved := false
 var google_calendar_credential_error := ""
 var google_calendar_credential_action := ""
 var recovered_legacy_test_settings := false
+var duration_settings_resize_queued := false
+var duration_settings_base_note_height := -1
+var language_settings_resize_queued := false
+var language_settings_base_note_height := -1
+var pet_notes_resize_queued := false
+var pet_notes_base_note_height := -1
+var pet_notes_base_status_height := -1
 
 
 func _ready() -> void:
@@ -562,6 +587,10 @@ func _build_hud() -> void:
 	notification_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	notification_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	notification_label.clip_text = true
+	notification_label.text_overrun_behavior = (
+		TextServer.OVERRUN_TRIM_ELLIPSIS
+	)
 	notification_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	notification_label.add_theme_color_override("font_color", Color("#352B42"))
 	notification_label.add_theme_font_size_override("font_size", 14)
@@ -629,7 +658,7 @@ func _create_notification_button() -> Button:
 func _build_duration_settings_window() -> void:
 	duration_settings_window = Window.new()
 	duration_settings_window.name = "DurationSettingsWindow"
-	duration_settings_window.size = Vector2i(430, 390)
+	duration_settings_window.size = DURATION_SETTINGS_WINDOW_SIZE
 	duration_settings_window.min_size = Vector2i(380, 360)
 	duration_settings_window.unresizable = true
 	duration_settings_window.transient = true
@@ -648,58 +677,75 @@ func _build_duration_settings_window() -> void:
 	margin.add_theme_constant_override("margin_bottom", 18)
 	duration_settings_window.add_child(margin)
 
-	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 12)
-	margin.add_child(content)
+	duration_settings_content = VBoxContainer.new()
+	duration_settings_content.add_theme_constant_override("separation", 12)
+	margin.add_child(duration_settings_content)
 
 	duration_settings_title = Label.new()
 	duration_settings_title.add_theme_font_size_override("font_size", 20)
-	content.add_child(duration_settings_title)
+	duration_settings_content.add_child(duration_settings_title)
+
+	duration_settings_scroll = ScrollContainer.new()
+	duration_settings_scroll.horizontal_scroll_mode = (
+		ScrollContainer.SCROLL_MODE_DISABLED
+	)
+	duration_settings_scroll.vertical_scroll_mode = (
+		ScrollContainer.SCROLL_MODE_AUTO
+	)
+	duration_settings_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	duration_settings_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	duration_settings_content.add_child(duration_settings_scroll)
+
+	duration_settings_scroll_content = VBoxContainer.new()
+	duration_settings_scroll_content.add_theme_constant_override(
+		"separation",
+		12
+	)
+	duration_settings_scroll_content.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+	duration_settings_scroll.add_child(duration_settings_scroll_content)
 
 	duration_settings_note = Label.new()
 	duration_settings_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	duration_settings_note.custom_minimum_size = Vector2(0, 44)
-	content.add_child(duration_settings_note)
+	duration_settings_scroll_content.add_child(duration_settings_note)
 
 	var fields := GridContainer.new()
 	fields.columns = 2
 	fields.add_theme_constant_override("h_separation", 16)
 	fields.add_theme_constant_override("v_separation", 9)
-	content.add_child(fields)
+	duration_settings_scroll_content.add_child(fields)
 	_add_duration_field(fields, "focus", 1, 240)
 	_add_duration_field(fields, "break", 1, 120)
 	_add_duration_field(fields, "water", 5, 240)
 	_add_duration_field(fields, "stand", 5, 240)
 	_add_duration_field(fields, "snooze", 1, 60)
 
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(spacer)
-
-	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 8)
-	content.add_child(buttons)
+	duration_settings_footer = HBoxContainer.new()
+	duration_settings_footer.add_theme_constant_override("separation", 8)
+	duration_settings_content.add_child(duration_settings_footer)
 
 	duration_reset_button = Button.new()
 	duration_reset_button.focus_mode = Control.FOCUS_NONE
 	duration_reset_button.pressed.connect(
 		_reset_duration_settings_form
 	)
-	buttons.add_child(duration_reset_button)
+	duration_settings_footer.add_child(duration_reset_button)
 
 	var button_spacer := Control.new()
 	button_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	buttons.add_child(button_spacer)
+	duration_settings_footer.add_child(button_spacer)
 
 	duration_cancel_button = Button.new()
 	duration_cancel_button.focus_mode = Control.FOCUS_NONE
 	duration_cancel_button.pressed.connect(duration_settings_window.hide)
-	buttons.add_child(duration_cancel_button)
+	duration_settings_footer.add_child(duration_cancel_button)
 
 	duration_save_button = Button.new()
 	duration_save_button.focus_mode = Control.FOCUS_NONE
 	duration_save_button.pressed.connect(_save_duration_settings)
-	buttons.add_child(duration_save_button)
+	duration_settings_footer.add_child(duration_save_button)
 	_refresh_duration_settings_texts()
 
 
@@ -748,7 +794,8 @@ func _open_duration_settings() -> void:
 	duration_spin_boxes["snooze"].value = (
 		reminder_manager.snooze_seconds() / 60.0
 	)
-	duration_settings_window.popup_centered(Vector2i(430, 390))
+	duration_settings_window.popup_centered(DURATION_SETTINGS_WINDOW_SIZE)
+	_queue_duration_settings_window_resize()
 
 
 func _reset_duration_settings_form() -> void:
@@ -832,12 +879,40 @@ func _refresh_duration_settings_texts() -> void:
 	duration_reset_button.text = _text("duration_reset")
 	duration_cancel_button.text = _text("duration_cancel")
 	duration_save_button.text = _text("duration_save")
+	_queue_duration_settings_window_resize()
+
+
+func _queue_duration_settings_window_resize() -> void:
+	if duration_settings_window == null or duration_settings_resize_queued:
+		return
+	duration_settings_resize_queued = true
+	_resize_duration_settings_window.call_deferred()
+
+
+func _resize_duration_settings_window() -> void:
+	duration_settings_resize_queued = false
+	if duration_settings_window == null or duration_settings_note == null:
+		return
+	var note_height := _wrapped_label_height(
+		duration_settings_note,
+		44,
+		DURATION_SETTINGS_WINDOW_SIZE.x - 40
+	)
+	if duration_settings_base_note_height < 0:
+		duration_settings_base_note_height = note_height
+	duration_settings_note.custom_minimum_size.y = note_height
+	_resize_centered_settings_window(
+		duration_settings_window,
+		DURATION_SETTINGS_WINDOW_SIZE,
+		DURATION_SETTINGS_WINDOW_MAX_HEIGHT,
+		maxi(0, note_height - duration_settings_base_note_height)
+	)
 
 
 func _build_language_settings_window() -> void:
 	language_settings_window = Window.new()
 	language_settings_window.name = "LanguageSettingsWindow"
-	language_settings_window.size = Vector2i(390, 250)
+	language_settings_window.size = LANGUAGE_SETTINGS_WINDOW_SIZE
 	language_settings_window.min_size = Vector2i(350, 230)
 	language_settings_window.unresizable = true
 	language_settings_window.transient = true
@@ -856,22 +931,43 @@ func _build_language_settings_window() -> void:
 	margin.add_theme_constant_override("margin_bottom", 18)
 	language_settings_window.add_child(margin)
 
-	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 12)
-	margin.add_child(content)
+	language_settings_content = VBoxContainer.new()
+	language_settings_content.add_theme_constant_override("separation", 12)
+	margin.add_child(language_settings_content)
 
 	language_settings_title = Label.new()
 	language_settings_title.add_theme_font_size_override("font_size", 20)
-	content.add_child(language_settings_title)
+	language_settings_content.add_child(language_settings_title)
+
+	language_settings_scroll = ScrollContainer.new()
+	language_settings_scroll.horizontal_scroll_mode = (
+		ScrollContainer.SCROLL_MODE_DISABLED
+	)
+	language_settings_scroll.vertical_scroll_mode = (
+		ScrollContainer.SCROLL_MODE_AUTO
+	)
+	language_settings_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	language_settings_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	language_settings_content.add_child(language_settings_scroll)
+
+	language_settings_scroll_content = VBoxContainer.new()
+	language_settings_scroll_content.add_theme_constant_override(
+		"separation",
+		12
+	)
+	language_settings_scroll_content.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+	language_settings_scroll.add_child(language_settings_scroll_content)
 
 	language_settings_note = Label.new()
 	language_settings_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	language_settings_note.custom_minimum_size = Vector2(0, 40)
-	content.add_child(language_settings_note)
+	language_settings_scroll_content.add_child(language_settings_note)
 
 	var language_row := HBoxContainer.new()
 	language_row.add_theme_constant_override("separation", 12)
-	content.add_child(language_row)
+	language_settings_scroll_content.add_child(language_row)
 
 	language_settings_label = Label.new()
 	language_settings_label.custom_minimum_size = Vector2(125, 32)
@@ -893,24 +989,20 @@ func _build_language_settings_window() -> void:
 		)
 	language_row.add_child(language_option_button)
 
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(spacer)
-
-	var buttons := HBoxContainer.new()
-	buttons.alignment = BoxContainer.ALIGNMENT_END
-	buttons.add_theme_constant_override("separation", 8)
-	content.add_child(buttons)
+	language_settings_footer = HBoxContainer.new()
+	language_settings_footer.alignment = BoxContainer.ALIGNMENT_END
+	language_settings_footer.add_theme_constant_override("separation", 8)
+	language_settings_content.add_child(language_settings_footer)
 
 	language_cancel_button = Button.new()
 	language_cancel_button.focus_mode = Control.FOCUS_NONE
 	language_cancel_button.pressed.connect(language_settings_window.hide)
-	buttons.add_child(language_cancel_button)
+	language_settings_footer.add_child(language_cancel_button)
 
 	language_save_button = Button.new()
 	language_save_button.focus_mode = Control.FOCUS_NONE
 	language_save_button.pressed.connect(_save_language_settings)
-	buttons.add_child(language_save_button)
+	language_settings_footer.add_child(language_save_button)
 	_refresh_language_settings_texts()
 
 
@@ -923,7 +1015,8 @@ func _open_language_settings() -> void:
 		if str(language_option_button.get_item_metadata(index)) == current_language:
 			language_option_button.select(index)
 			break
-	language_settings_window.popup_centered(Vector2i(390, 250))
+	language_settings_window.popup_centered(LANGUAGE_SETTINGS_WINDOW_SIZE)
+	_queue_language_settings_window_resize()
 
 
 func _save_language_settings() -> void:
@@ -954,6 +1047,34 @@ func _refresh_language_settings_texts() -> void:
 		)
 	language_cancel_button.text = _text("duration_cancel")
 	language_save_button.text = _text("duration_save")
+	_queue_language_settings_window_resize()
+
+
+func _queue_language_settings_window_resize() -> void:
+	if language_settings_window == null or language_settings_resize_queued:
+		return
+	language_settings_resize_queued = true
+	_resize_language_settings_window.call_deferred()
+
+
+func _resize_language_settings_window() -> void:
+	language_settings_resize_queued = false
+	if language_settings_window == null or language_settings_note == null:
+		return
+	var note_height := _wrapped_label_height(
+		language_settings_note,
+		40,
+		LANGUAGE_SETTINGS_WINDOW_SIZE.x - 40
+	)
+	if language_settings_base_note_height < 0:
+		language_settings_base_note_height = note_height
+	language_settings_note.custom_minimum_size.y = note_height
+	_resize_centered_settings_window(
+		language_settings_window,
+		LANGUAGE_SETTINGS_WINDOW_SIZE,
+		LANGUAGE_SETTINGS_WINDOW_MAX_HEIGHT,
+		maxi(0, note_height - language_settings_base_note_height)
+	)
 
 
 func _build_pet_notes_settings_window() -> void:
@@ -985,9 +1106,9 @@ func _build_pet_notes_settings_window() -> void:
 	margin.add_theme_constant_override("margin_bottom", 14)
 	pet_notes_settings_window.add_child(margin)
 
-	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 8)
-	margin.add_child(content)
+	pet_notes_content = VBoxContainer.new()
+	pet_notes_content.add_theme_constant_override("separation", 8)
+	margin.add_child(pet_notes_content)
 
 	pet_notes_settings_title = Label.new()
 	pet_notes_settings_title.add_theme_font_size_override("font_size", 18)
@@ -995,7 +1116,21 @@ func _build_pet_notes_settings_window() -> void:
 		"font_color",
 		Color.WHITE
 	)
-	content.add_child(pet_notes_settings_title)
+	pet_notes_content.add_child(pet_notes_settings_title)
+
+	pet_notes_scroll = ScrollContainer.new()
+	pet_notes_scroll.horizontal_scroll_mode = (
+		ScrollContainer.SCROLL_MODE_DISABLED
+	)
+	pet_notes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	pet_notes_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pet_notes_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pet_notes_content.add_child(pet_notes_scroll)
+
+	pet_notes_scroll_content = VBoxContainer.new()
+	pet_notes_scroll_content.add_theme_constant_override("separation", 5)
+	pet_notes_scroll_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pet_notes_scroll.add_child(pet_notes_scroll_content)
 
 	pet_notes_settings_note = Label.new()
 	pet_notes_settings_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1005,14 +1140,14 @@ func _build_pet_notes_settings_window() -> void:
 		"font_color",
 		Color("#C8BDD9")
 	)
-	content.add_child(pet_notes_settings_note)
+	pet_notes_scroll_content.add_child(pet_notes_settings_note)
 
 	pet_notes_master_card = PanelContainer.new()
 	pet_notes_master_card.add_theme_stylebox_override(
 		"panel",
 		_settings_card_style()
 	)
-	content.add_child(pet_notes_master_card)
+	pet_notes_scroll_content.add_child(pet_notes_master_card)
 
 	pet_notes_enabled_check = CheckBox.new()
 	pet_notes_enabled_check.focus_mode = Control.FOCUS_NONE
@@ -1024,7 +1159,7 @@ func _build_pet_notes_settings_window() -> void:
 		"panel",
 		_settings_card_style()
 	)
-	content.add_child(pet_notes_calendar_card)
+	pet_notes_scroll_content.add_child(pet_notes_calendar_card)
 
 	var calendar_content := VBoxContainer.new()
 	calendar_content.add_theme_constant_override("separation", 4)
@@ -1082,14 +1217,10 @@ func _build_pet_notes_settings_window() -> void:
 	)
 	calendar_buttons.add_child(google_calendar_disconnect_button)
 
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_child(spacer)
-
-	var buttons := HBoxContainer.new()
-	buttons.alignment = BoxContainer.ALIGNMENT_END
-	buttons.add_theme_constant_override("separation", 6)
-	content.add_child(buttons)
+	pet_notes_footer = HBoxContainer.new()
+	pet_notes_footer.alignment = BoxContainer.ALIGNMENT_END
+	pet_notes_footer.add_theme_constant_override("separation", 6)
+	pet_notes_content.add_child(pet_notes_footer)
 
 	pet_notes_cancel_button = Button.new()
 	pet_notes_cancel_button.focus_mode = Control.FOCUS_NONE
@@ -1097,13 +1228,13 @@ func _build_pet_notes_settings_window() -> void:
 	pet_notes_cancel_button.pressed.connect(
 		pet_notes_settings_window.hide
 	)
-	buttons.add_child(pet_notes_cancel_button)
+	pet_notes_footer.add_child(pet_notes_cancel_button)
 
 	pet_notes_save_button = Button.new()
 	pet_notes_save_button.focus_mode = Control.FOCUS_NONE
 	_style_settings_button(pet_notes_save_button, true)
 	pet_notes_save_button.pressed.connect(_save_pet_notes_settings)
-	buttons.add_child(pet_notes_save_button)
+	pet_notes_footer.add_child(pet_notes_save_button)
 	_refresh_pet_notes_settings_texts()
 
 
@@ -1223,6 +1354,7 @@ func _open_pet_notes_settings() -> void:
 	)
 	_refresh_pet_notes_settings_texts()
 	pet_notes_settings_window.popup_centered(PET_NOTES_WINDOW_SIZE)
+	_queue_pet_notes_window_resize()
 
 
 func _save_pet_notes_settings() -> void:
@@ -1359,6 +1491,108 @@ func _refresh_google_calendar_status() -> void:
 	google_calendar_sync_button.disabled = is_busy
 	google_calendar_disconnect_button.visible = is_connected
 	google_calendar_disconnect_button.disabled = is_busy
+	_queue_pet_notes_window_resize()
+
+
+func _queue_pet_notes_window_resize() -> void:
+	if (
+		pet_notes_settings_window == null
+		or pet_notes_resize_queued
+	):
+		return
+	pet_notes_resize_queued = true
+	_resize_pet_notes_settings_window.call_deferred()
+
+
+func _resize_pet_notes_settings_window() -> void:
+	pet_notes_resize_queued = false
+	if (
+		pet_notes_settings_window == null
+		or pet_notes_scroll_content == null
+		or pet_notes_footer == null
+	):
+		return
+	var note_height := _wrapped_label_height(
+		pet_notes_settings_note,
+		34,
+		PET_NOTES_WINDOW_SIZE.x - 64
+	)
+	var status_height := _wrapped_label_height(
+		google_calendar_status_label,
+		34,
+		PET_NOTES_WINDOW_SIZE.x - 64
+	)
+	if pet_notes_base_note_height < 0:
+		pet_notes_base_note_height = note_height
+	if pet_notes_base_status_height < 0:
+		pet_notes_base_status_height = status_height
+	pet_notes_settings_note.custom_minimum_size.y = note_height
+	google_calendar_status_label.custom_minimum_size.y = status_height
+	_resize_centered_settings_window(
+		pet_notes_settings_window,
+		PET_NOTES_WINDOW_SIZE,
+		PET_NOTES_WINDOW_MAX_HEIGHT,
+		maxi(0, note_height - pet_notes_base_note_height)
+		+ maxi(0, status_height - pet_notes_base_status_height)
+	)
+
+
+func _resize_centered_settings_window(
+	window: Window,
+	base_size: Vector2i,
+	configured_maximum_height: int,
+	extra_height: int
+) -> void:
+	var maximum_height := configured_maximum_height
+	var screen := window.current_screen
+	if screen < 0:
+		screen = DisplayServer.get_primary_screen()
+	var usable_rect := DisplayServer.screen_get_usable_rect(screen)
+	var has_usable_screen := (
+		usable_rect.size.y
+		>= base_size.y + SETTINGS_WINDOW_SCREEN_MARGIN
+	)
+	if has_usable_screen:
+		maximum_height = mini(
+			maximum_height,
+			maxi(
+				base_size.y,
+				usable_rect.size.y - SETTINGS_WINDOW_SCREEN_MARGIN
+			)
+		)
+	var target_size := Vector2i(
+		base_size.x,
+		clampi(
+			base_size.y + extra_height,
+			base_size.y,
+			maximum_height
+		)
+	)
+	window.size = target_size
+	if window.visible and has_usable_screen:
+		window.position = (
+			usable_rect.position
+			+ (usable_rect.size - target_size) / 2
+		)
+
+
+func _wrapped_label_height(
+	label: Label,
+	minimum_height: int,
+	fallback_width: float
+) -> int:
+	var font := label.get_theme_font("font")
+	var font_size := label.get_theme_font_size("font_size")
+	var wrap_width := label.size.x
+	if wrap_width < fallback_width / 2.0:
+		wrap_width = fallback_width
+	var measured_size := font.get_multiline_string_size(
+		label.text,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		wrap_width,
+		font_size
+	)
+	return maxi(minimum_height, ceili(measured_size.y))
 
 
 func _google_calendar_error_message(code: String) -> String:
@@ -2048,6 +2282,7 @@ func _layout_notification_panel() -> void:
 		target_size = (
 			Vector2(264, 102) * settings.display_scale
 		)
+		notification_label.max_lines_visible = 3
 	else:
 		target_position = (
 			Vector2(62, 52) * settings.display_scale
@@ -2055,6 +2290,7 @@ func _layout_notification_panel() -> void:
 		target_size = (
 			Vector2(236, 60) * settings.display_scale
 		)
+		notification_label.max_lines_visible = 2
 	# Give the wrapping label its final width before the first container
 	# sort. Without this, Godot can calculate a one-character-wide
 	# minimum size and produce an extremely tall first Pet Note.
