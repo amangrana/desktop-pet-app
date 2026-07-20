@@ -159,15 +159,36 @@ func _run() -> void:
 		main.notification_panel.visible,
 		"focus completion must show the pet notification bubble"
 	)
+	_expect_notification_inside_window_shape(
+		main,
+		"focus completion"
+	)
 	_expect(
 		"Break starts" in main.notification_label.text,
 		"focus completion bubble must show the auto-break countdown"
+	)
+	_expect(
+		main.notification_confirmation_active
+		and main.notification_actions.visible
+		and main.notification_done_button.text == "OK"
+		and not main.notification_snooze_button.visible
+		and not main.notification_stop_button.visible,
+		(
+			"focus completion must provide one dismissible OK action "
+			+ "without changing the automatic break"
+		)
 	)
 	_expect(
 		main._has_auto_transition(),
 		"focus completion must schedule its automatic break"
 	)
 	var pending_break_deadline: float = main.auto_transition_deadline_unix
+	main.notification_done_button.pressed.emit()
+	_expect(
+		not main.notification_panel.visible
+		and main._has_auto_transition(),
+		"OK must hide the focus completion bubble without canceling break"
+	)
 	main._handle_pet_tap(
 		main.pet.to_global(main.pet.get_focus_hotspot_centers()[0])
 	)
@@ -260,6 +281,20 @@ func _run() -> void:
 		"Break complete" in main.notification_label.text,
 		"completion bubble must explain that break finished"
 	)
+	_expect(
+		main.notification_confirmation_active
+		and main.notification_done_button.text == "OK"
+		and is_equal_approx(
+			main.notification_timer.wait_time,
+			main.COMPLETION_NOTIFICATION_SECONDS
+		),
+		"break completion must remain for five seconds or close with OK"
+	)
+	main.notification_done_button.pressed.emit()
+	_expect(
+		not main.notification_panel.visible,
+		"break completion OK must close the informational bubble"
+	)
 	await create_timer(1.2).timeout
 	_expect(
 		main.timer_manager.state == TimerManagerScript.State.WAITING_NEXT,
@@ -299,6 +334,7 @@ func _test_focus_hotspot(main, pet_id: StringName) -> void:
 		centers.size() == 2,
 		"pet must define both front-paw hotspots: %s" % pet_id
 	)
+	_test_interaction_outline(main, pet_id, centers)
 	_test_edge_clamping(main, pet_id)
 	main._handle_pet_tap(
 		main.pet.to_global(Vector2(0, -100))
@@ -337,6 +373,10 @@ func _test_focus_hotspot(main, pet_id: StringName) -> void:
 			"Focus started" in main.notification_label.text,
 			"front-paw tap must confirm focus start: %s" % pet_id
 		)
+		_expect_notification_inside_window_shape(
+			main,
+			"front-paw focus confirmation: %s" % pet_id
+		)
 		var original_end_unix: float = main.timer_manager.end_unix
 		main._handle_pet_tap(main.pet.to_global(center))
 		_expect(
@@ -349,6 +389,89 @@ func _test_focus_hotspot(main, pet_id: StringName) -> void:
 			"paw tap during focus must not restart its deadline: %s" % pet_id
 		)
 		main.timer_manager.cancel()
+
+
+func _test_interaction_outline(
+	main,
+	pet_id: StringName,
+	hotspot_centers: PackedVector2Array
+) -> void:
+	var generated: PackedVector2Array = (
+		main.pet.get_interaction_polygon()
+	)
+	var authored: PackedVector2Array = (
+		main.pet.definition.interaction_polygon
+	)
+	var generated_area := absf(_polygon_area(generated))
+	var authored_area := absf(_polygon_area(authored))
+	var hotspots_inside := true
+	for center in hotspot_centers:
+		if not Geometry2D.is_point_in_polygon(center, generated):
+			hotspots_inside = false
+			break
+	_expect(
+		generated.size() > authored.size()
+		and generated_area < authored_area * 0.85
+		and hotspots_inside,
+		(
+			(
+				"runtime interaction outline must follow visible alpha "
+				+ "while retaining paw hotspots: %s "
+				+ "(points=%d area=%.1f authored=%.1f)"
+			)
+			% [
+				str(pet_id),
+				int(generated.size()),
+				float(generated_area),
+				float(authored_area),
+			]
+		)
+	)
+	if main.pet.definition.show_click_heart:
+		_expect(
+			Geometry2D.is_point_in_polygon(
+				main.pet.definition.heart_position,
+				generated
+			),
+			"interaction outline must keep the click heart visible: %s"
+			% pet_id
+		)
+
+
+func _expect_notification_inside_window_shape(
+	main,
+	context: String
+) -> void:
+	var shape: PackedVector2Array = (
+		main.get_window().mouse_passthrough_polygon
+	)
+	var rect := Rect2(
+		main.notification_panel.position,
+		main.notification_panel.size
+	).grow(-1.0)
+	for point in [
+		rect.position,
+		rect.position + Vector2(rect.size.x, 0),
+		rect.end,
+		rect.position + Vector2(0, rect.size.y),
+	]:
+		_expect(
+			Geometry2D.is_point_in_polygon(point, shape),
+			"%s bubble must be inside the Windows window shape" % context
+		)
+
+
+func _polygon_area(polygon: PackedVector2Array) -> float:
+	if polygon.size() < 3:
+		return 0.0
+	var area := 0.0
+	for index in polygon.size():
+		var next_index := (index + 1) % polygon.size()
+		area += (
+			polygon[index].x * polygon[next_index].y
+			- polygon[next_index].x * polygon[index].y
+		)
+	return area * 0.5
 
 
 func _test_edge_clamping(main, pet_id: StringName) -> void:

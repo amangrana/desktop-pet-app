@@ -209,10 +209,6 @@ func complete_due() -> int:
 	return _reschedule_current_due(interval_seconds(current_due_kind()))
 
 
-func skip_due() -> int:
-	return _reschedule_current_due(interval_seconds(current_due_kind()))
-
-
 func disable_due() -> int:
 	var kind := current_due_kind()
 	if kind == TimerManagerScript.Kind.NONE:
@@ -229,10 +225,6 @@ func snooze_due(duration_seconds := -1) -> int:
 		else duration_seconds
 	)
 	return _reschedule_current_due(duration)
-
-
-func pause_due_today() -> int:
-	return pause_kind_until(current_due_kind(), _next_local_midnight_unix())
 
 
 func pause_kind_until(kind: int, resume_unix: float) -> int:
@@ -445,21 +437,6 @@ func _local_hour() -> int:
 		return clampi(int(local_hour_source.call()), 0, 23)
 	var local_now := Time.get_datetime_dict_from_system(false)
 	return int(local_now.hour)
-
-
-func _next_local_midnight_unix() -> float:
-	var local_now := Time.get_datetime_dict_from_system(false)
-	var today_days := Time.get_unix_time_from_datetime_dict({
-		"year": local_now.year,
-		"month": local_now.month,
-		"day": local_now.day,
-		"hour": 0,
-		"minute": 0,
-		"second": 0,
-	}) / 86400.0
-	var tomorrow_utc_like := (floorf(today_days) + 1.0) * 86400.0
-	var timezone := Time.get_time_zone_from_system()
-	return tomorrow_utc_like - float(timezone.get("bias", 0)) * 60.0
 
 
 func _now() -> float:

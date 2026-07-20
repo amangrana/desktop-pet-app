@@ -95,6 +95,24 @@ func _run() -> void:
 	var provider = GoogleCalendarProviderScript.new()
 	root.add_child(provider)
 	provider.configure("desktop-client-id")
+	var timeout_provider = GoogleCalendarProviderScript.new()
+	root.add_child(timeout_provider)
+	timeout_provider._callback_server = TCPServer.new()
+	timeout_provider._authorization_deadline_ticks_msec = (
+		Time.get_ticks_msec() - 1
+	)
+	timeout_provider._process(0.0)
+	_expect(
+		timeout_provider.state
+		== GoogleCalendarProviderScript.State.ERROR
+		and timeout_provider.status_message == "authorization_timeout"
+		and timeout_provider._callback_server == null
+		and timeout_provider._authorization_deadline_ticks_msec == 0,
+		(
+			"an abandoned browser authorization must time out and release "
+			+ "the loopback callback server"
+		)
+	)
 	_expect(
 		provider._apply_client_credentials({
 			"installed": {

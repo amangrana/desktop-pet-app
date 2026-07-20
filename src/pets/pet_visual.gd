@@ -1,6 +1,10 @@
 class_name PetVisual
 extends Node2D
 
+const INTERACTION_ALPHA_THRESHOLD := 0.08
+const INTERACTION_SAFETY_MARGIN := 16.0
+const INTERACTION_SIMPLIFY_EPSILON := 2.0
+
 enum Reaction {
 	NONE,
 	KEYBOARD,
@@ -18,6 +22,7 @@ var _reaction := Reaction.NONE
 var _alternate_side := false
 var _focus_mode := false
 var _visible_bounds := Rect2()
+var _interaction_polygon := PackedVector2Array()
 
 
 func _ready() -> void:
@@ -102,6 +107,7 @@ func _draw() -> void:
 func set_definition(value: PetDefinition) -> void:
 	definition = value
 	_visible_bounds = _calculate_visible_bounds()
+	_interaction_polygon = _calculate_interaction_polygon()
 	_reaction = Reaction.NONE
 	_reaction_remaining = 0.0
 	_idle_motion_remaining = 0.0
@@ -120,6 +126,8 @@ func get_display_name() -> String:
 func get_interaction_polygon() -> PackedVector2Array:
 	if definition == null:
 		return PackedVector2Array()
+	if _interaction_polygon.size() >= 3:
+		return _interaction_polygon
 	return definition.interaction_polygon
 
 
@@ -267,3 +275,136 @@ func _calculate_visible_bounds() -> Rect2:
 		full_bounds.position + Vector2(used_pixels.position) * pixel_scale,
 		Vector2(used_pixels.size) * pixel_scale
 	)
+
+
+func _calculate_interaction_polygon() -> PackedVector2Array:
+	if definition == null or definition.idle_texture == null:
+		return PackedVector2Array()
+	var image: Image = definition.idle_texture.get_image()
+	if image == null or image.is_empty():
+		return PackedVector2Array()
+
+	var mask_image := image.duplicate()
+	var mask_size := Vector2i(
+		maxi(1, roundi(definition.display_size.x)),
+		maxi(1, roundi(definition.display_size.y))
+	)
+	if mask_image.get_size() != mask_size:
+		mask_image.resize(
+			mask_size.x,
+			mask_size.y,
+			Image.INTERPOLATE_LANCZOS
+		)
+	var image_size: Vector2i = mask_image.get_size()
+	if image_size.x <= 0 or image_size.y <= 0:
+		return PackedVector2Array()
+	var pixel_scale := Vector2(
+		definition.display_size.x / float(image_size.x),
+		definition.display_size.y / float(image_size.y)
+	)
+	var smallest_pixel_scale := minf(pixel_scale.x, pixel_scale.y)
+	if smallest_pixel_scale <= 0.0:
+		return PackedVector2Array()
+
+	var bitmap := BitMap.new()
+	bitmap.create_from_image_alpha(
+		mask_image,
+		INTERACTION_ALPHA_THRESHOLD
+	)
+	var bitmap_rect := Rect2i(Vector2i.ZERO, image_size)
+	bitmap.grow_mask(
+		ceili(INTERACTION_SAFETY_MARGIN / smallest_pixel_scale),
+		bitmap_rect
+	)
+	var source_polygons: Array[PackedVector2Array] = (
+		bitmap.opaque_to_polygons(
+			bitmap_rect,
+			INTERACTION_SIMPLIFY_EPSILON
+		)
+	)
+	var source_polygon := _largest_polygon(source_polygons)
+	if source_polygon.size() < 3:
+		return PackedVector2Array()
+
+	var full_bounds := Rect2(
+		definition.visual_offset - definition.display_size / 2.0,
+		definition.display_size
+	)
+	var mapped_polygon := PackedVector2Array()
+	for point in source_polygon:
+		mapped_polygon.append(
+			full_bounds.position + Vector2(point) * pixel_scale
+		)
+	if definition.show_click_heart:
+		mapped_polygon = _include_click_heart(mapped_polygon)
+	return mapped_polygon
+
+
+func _include_click_heart(
+	polygon: PackedVector2Array
+) -> PackedVector2Array:
+	if polygon.size() < 3:
+		return polygon
+	var heart_center := definition.heart_position
+	var nearest := polygon[0]
+	var nearest_distance := heart_center.distance_squared_to(nearest)
+	for point in polygon:
+		var distance := heart_center.distance_squared_to(point)
+		if distance >= nearest_distance:
+			continue
+		nearest = point
+		nearest_distance = distance
+
+	var direction := heart_center - nearest
+	if direction.length_squared() <= 0.001:
+		return polygon
+	var unit_direction := direction.normalized()
+	var normal := Vector2(-unit_direction.y, unit_direction.x) * 3.0
+	var corridor := PackedVector2Array([
+		nearest - unit_direction * 4.0 - normal,
+		nearest - unit_direction * 4.0 + normal,
+		heart_center + normal,
+		heart_center - normal,
+	])
+	var merged := _largest_polygon(
+		Geometry2D.merge_polygons(polygon, corridor)
+	)
+
+	var heart_polygon := PackedVector2Array()
+	var heart_radius := 24.0 * definition.heart_scale
+	for index in 16:
+		var angle := TAU * float(index) / 16.0
+		heart_polygon.append(
+			heart_center
+			+ Vector2(cos(angle), sin(angle)) * heart_radius
+		)
+	return _largest_polygon(
+		Geometry2D.merge_polygons(merged, heart_polygon)
+	)
+
+
+func _largest_polygon(
+	polygons: Array[PackedVector2Array]
+) -> PackedVector2Array:
+	var largest := PackedVector2Array()
+	var largest_area := 0.0
+	for polygon in polygons:
+		var area := absf(_polygon_signed_area(polygon))
+		if area <= largest_area:
+			continue
+		largest = polygon
+		largest_area = area
+	return largest
+
+
+func _polygon_signed_area(polygon: PackedVector2Array) -> float:
+	if polygon.size() < 3:
+		return 0.0
+	var area := 0.0
+	for index in polygon.size():
+		var next_index := (index + 1) % polygon.size()
+		area += (
+			polygon[index].x * polygon[next_index].y
+			- polygon[next_index].x * polygon[index].y
+		)
+	return area * 0.5

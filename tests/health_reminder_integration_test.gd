@@ -9,6 +9,8 @@ const ReminderManagerScript := preload(
 const REMINDERS_SUBMENU_ID := 2
 const WATER_MENU_ID := 50
 const COMPLETE_MENU_ID := 52
+const REMOVED_SKIP_MENU_ID := 54
+const REMOVED_PAUSE_TODAY_MENU_ID := 55
 const DEV_WATER_MENU_ID := 48
 const DEV_STAND_MENU_ID := 49
 const DURATION_SETTINGS_MENU_ID := 57
@@ -42,6 +44,19 @@ func _run() -> void:
 	_expect(
 		main.reminder_menu.get_item_index(WATER_MENU_ID) >= 0,
 		"reminders submenu must expose the water toggle"
+	)
+	_expect(
+		main.reminder_menu.get_item_index(STOP_REMINDER_MENU_ID) >= 0
+		and main.reminder_menu.get_item_index(
+			REMOVED_SKIP_MENU_ID
+		) < 0
+		and main.reminder_menu.get_item_index(
+			REMOVED_PAUSE_TODAY_MENU_ID
+		) < 0,
+		(
+			"reminder actions must contain Done, Snooze, and Turn off "
+			+ "without the removed Skip or Pause today choices"
+		)
 	)
 	_expect(
 		main.settings_menu.get_item_index(DURATION_SETTINGS_MENU_ID) >= 0
@@ -243,17 +258,15 @@ func _run() -> void:
 		"due health reminder must show the pet bubble"
 	)
 	_expect(
-		main.reminder_action_menu.get_item_index(
-			STOP_REMINDER_MENU_ID
-		) >= 0
-		and "Turn off water reminders" in (
-			main.reminder_action_menu.get_item_text(
-				main.reminder_action_menu.get_item_index(
-					STOP_REMINDER_MENU_ID
-				)
-			)
+		main.notification_stop_button.visible
+		and main.notification_stop_button.text == "Turn off"
+		and main.notification_stop_button.has_theme_stylebox_override(
+			"normal"
 		),
-		"due reminder More menu must offer a clear permanent stop action"
+		(
+			"due reminder bubble must expose a direct warning-styled "
+			+ "Turn off action"
+		)
 	)
 	_expect(
 		"Water break" in main.notification_label.text,
@@ -262,8 +275,12 @@ func _run() -> void:
 	_expect(
 		main.notification_actions.visible
 		and main.notification_done_button.text == "Done"
-		and main.notification_snooze_button.text == "15 min",
-		"due reminder bubble must expose direct completion and snooze"
+		and main.notification_snooze_button.text == "15 min"
+		and main.notification_stop_button.text == "Turn off",
+		(
+			"due reminder bubble must directly expose Done, Snooze, "
+			+ "and Turn off"
+		)
 	)
 	_expect(
 		main.notification_panel.mouse_filter == Control.MOUSE_FILTER_STOP,
@@ -306,8 +323,15 @@ func _run() -> void:
 		not main.reminder_manager.is_due(TimerManagerScript.Kind.WATER)
 		and main.reminder_manager.remaining_seconds(
 			TimerManagerScript.Kind.WATER
-		) == 15 * 60,
-		"bubble snooze button must use the configured duration"
+		) == 15 * 60
+		and is_equal_approx(
+			main.notification_timer.wait_time,
+			main.INFORMATION_NOTIFICATION_SECONDS
+		),
+		(
+			"bubble snooze must use the configured duration and show "
+			+ "only a short result message"
+		)
 	)
 
 	main._handle_menu_item(DEV_WATER_MENU_ID)
@@ -322,6 +346,13 @@ func _run() -> void:
 		not main.reminder_manager.is_due(TimerManagerScript.Kind.WATER),
 		"bubble completion button must schedule the next interval"
 	)
+	_expect(
+		is_equal_approx(
+			main.notification_timer.wait_time,
+			main.INFORMATION_NOTIFICATION_SECONDS
+		),
+		"Done result message must close after 2.5 seconds"
+	)
 
 	main._handle_menu_item(DEV_WATER_MENU_ID)
 	main.reminder_manager._timer_for(
@@ -330,7 +361,7 @@ func _run() -> void:
 	main.reminder_manager._timer_for(
 		TimerManagerScript.Kind.WATER
 	)._process(0.0)
-	main._handle_menu_item(STOP_REMINDER_MENU_ID)
+	main.notification_stop_button.pressed.emit()
 	_expect(
 		not main.reminder_manager.is_enabled(
 			TimerManagerScript.Kind.WATER
@@ -338,8 +369,15 @@ func _run() -> void:
 		and not main.reminder_manager.is_due(
 			TimerManagerScript.Kind.WATER
 		)
-		and "Water reminders are off" in main.notification_label.text,
-		"stop action must disable the due reminder until re-enabled"
+		and "Water reminders are off" in main.notification_label.text
+		and is_equal_approx(
+			main.notification_timer.wait_time,
+			main.INFORMATION_NOTIFICATION_SECONDS
+		),
+		(
+			"stop action must disable the due reminder and show only "
+			+ "a short result message"
+		)
 	)
 	main._handle_menu_item(WATER_MENU_ID)
 

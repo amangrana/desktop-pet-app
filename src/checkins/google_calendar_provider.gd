@@ -27,6 +27,7 @@ const SCOPES := [
 const CALLBACK_PORT_MIN := 49152
 const CALLBACK_PORT_MAX := 65535
 const AUTO_SYNC_SECONDS := 15 * 60
+const AUTHORIZATION_TIMEOUT_SECONDS := 5 * 60.0
 
 var client_id := ""
 var state := State.DISCONNECTED
@@ -38,6 +39,7 @@ var _client_secret_required := false
 var _callback_server: TCPServer
 var _callback_peer: StreamPeerTCP
 var _callback_request_buffer := ""
+var _authorization_deadline_ticks_msec := 0
 var _redirect_uri := ""
 var _oauth_state := ""
 var _code_verifier := ""
@@ -133,6 +135,10 @@ func connect_account() -> bool:
 		_stop_callback_server()
 		_set_state(State.ERROR, "browser_open_failed")
 		return false
+	_authorization_deadline_ticks_msec = (
+		Time.get_ticks_msec()
+		+ roundi(AUTHORIZATION_TIMEOUT_SECONDS * 1000.0)
+	)
 	_set_state(State.CONNECTING, "waiting_for_authorization")
 	return true
 
@@ -187,6 +193,14 @@ func restore_refresh_token(refresh_token: String) -> bool:
 
 func _process(_delta: float) -> void:
 	if _callback_server == null:
+		return
+	if (
+		_authorization_deadline_ticks_msec > 0
+		and Time.get_ticks_msec()
+		>= _authorization_deadline_ticks_msec
+	):
+		_stop_callback_server()
+		_set_state(State.ERROR, "authorization_timeout")
 		return
 	if _callback_peer == null and _callback_server.is_connection_available():
 		_callback_peer = _callback_server.take_connection()
@@ -693,6 +707,7 @@ func _stop_callback_server() -> void:
 	if _callback_server != null:
 		_callback_server.stop()
 	_callback_server = null
+	_authorization_deadline_ticks_msec = 0
 
 
 func _set_state(next_state: int, message: String) -> void:

@@ -219,7 +219,7 @@ func _run() -> void:
 		and main.notification_actions.visible
 		and main.notification_done_button.visible
 		and not main.notification_snooze_button.visible
-		and not main.notification_more_button.visible
+		and not main.notification_stop_button.visible
 		and main.notification_done_button.text == "OK (10)",
 		"passive card must show only an OK button with countdown"
 	)
