@@ -1,6 +1,6 @@
 # Desktop Pet Prototype 0.1
 
-这是桌面宠物项目的第一个 Windows 技术原型。它使用 Godot 4.7.1 和 GDScript，不包含 AI、提醒、养成或 Steam 功能。当前宠物是原创巴哥犬 **Leo** 和以真实猫咪为原型创作的长毛猫 **Bobo**。
+这是桌面宠物项目的第一个 Windows 技术原型。它使用 Godot 4.7.1 和 GDScript，已包含专注计时与基础健康提醒，但不包含 AI、养成或 Steam 功能。当前宠物是黑色巴哥犬 **Leo**、英国长毛猫 **Bobo**、金黄色巴哥犬 **Milo**，以及蓝眼灰面罩的西伯利亚森林猫 **Mable**。
 
 ## 项目目录
 
@@ -12,6 +12,10 @@
 
 ![第二只宠物 Bobo](assets/pets/bobo/bobo-master.png)
 
+![第三只宠物 Milo](assets/pets/milo/milo-master.png)
+
+![第四只宠物 Mable](assets/pets/mable/mable-master.png)
+
 ## 已实现
 
 - 透明、无边框窗口
@@ -19,8 +23,10 @@
 - 拖动并保存窗口位置
 - 75%–150% 显示比例
 - 宠物区域接收鼠标，其他透明区域穿透
-- AI 辅助制作的原创巴哥犬 Leo 母版
-- 以用户参考照片为原型创作的长毛猫 Bobo 母版
+- 以用户参考照片为原型创作的黑色巴哥犬 Leo 母版，采用与 Bobo 统一的简洁卡通色块和柔和阴影；黑色四肢与银灰眼周在小尺寸下保持清晰
+- 以用户参考照片为原型创作的英国长毛猫 Bobo 母版
+- 将早期金黄色巴哥犬原型完整保留为第三只宠物 Milo
+- 以用户提供的真实照片为原型创作蓝眼西伯利亚森林猫 Mable 母版，以较大的圆眼和柔和面罩呈现友善卡通表情
 - Leo 的待机呼吸、偶发摆动、键盘、鼠标和点击反应
 - 自动发现 `assets/pets/*/pet.tres` 宠物包
 - 右键菜单切换宠物，并在重启后恢复选择
@@ -39,6 +45,15 @@
 - 使用真实结束时间恢复运行中或暂停中的计时，兼容游戏重启和电脑睡眠
 - 专注完成或休息完成时显示宠物气泡和高优先级提醒动作
 - 专注运行时减少随机待机动作；开发环境提供 1 秒测试计时
+- 两层右键菜单；顶层保持紧凑并实时显示当前专注或休息状态
+- 默认关闭、可独立启用的喝水与站立活动提醒
+- 健康提醒支持完成、按当前设置延后、跳过本次、暂停今天和关闭此类提醒，并按真实时间跨重启恢复
+- 独立双语弹窗可一次设置专注、休息、喝水、站立和延后的默认分钟数；可一键恢复 25 / 5 / 60 / 45 / 10 分钟，保存前只修改表单，运行中的计时不会被重置
+- 每日勿扰时段可选择关闭、22:00–08:00、23:00–08:00 或 00:00–08:00
+- 专注期间暂存已到期的健康提醒，在休息开始后再用宠物动作和气泡提示
+- 健康提醒气泡可直接点击完成、延后或打开更多操作；气泡收起后点击宠物可重新打开
+- 可选的“宠物小纸条 / Pet Notes”会在非专注、非勿扰且没有待处理提醒时显示在宠物图片上；`OK` 按钮显示关闭倒计时，也可手动关闭
+- 菜单、宠物气泡和系统对话框支持 English / 简体中文，并保存语言选择
 
 ## 活动感应与隐私
 
@@ -66,6 +81,18 @@ Windows 活动适配器已经接入。启用 `Activity sensing` 后，宠物在�
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\activity_helper\build.ps1
+```
+
+任务栏 helper 只调用 Windows Shell 的 `ITaskbarList::DeleteTab`，不会修改窗口样式。重新编译时运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\taskbar_helper\build.ps1
+```
+
+凭据 helper 只允许读写 `DesktopPet.*` Generic Credential，refresh token 不通过命令行或临时文件传递。重新编译时运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\credential_helper\build.ps1
 ```
 
 ## 打开与运行
@@ -102,12 +129,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\activ
 
 - 左键拖动宠物：移动窗口
 - 左键短按宠物：普通互动
-- 左键短按 Leo 或 Bobo 的任一前爪：开始 25 分钟专注
+- 左键短按 Leo、Bobo、Milo 或 Mable 的任一前爪：开始 25 分钟专注
 - 从任一前爪拖动：仍然移动宠物，不会误触专注
 - 宠物可以拖到屏幕可用区域边缘；透明窗口留白不再形成额外距离
-- 右键宠物：打开独立的系统菜单
-- 菜单中的 `Pet: <名字>`：切换当前宠物
-- 菜单中的 `Activity sensing`：启用或暂停真实 Windows 活动感应
+- 右键宠物：打开独立的快捷菜单
+- 顶层 `Focus — ...`：实时显示计时状态，并打开专注操作子菜单
+- `Pets` 子菜单：切换当前宠物
+- `Activity` 子菜单中的 `Activity sensing`：启用或暂停真实 Windows 活动感应
 - `Activity source`：显示 Windows helper 的启动或运行状态
 - `Session activity`：查看本次运行的键盘和鼠标计数
 - `Clear session activity`：清除本次运行的计数
@@ -118,11 +146,29 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\activ
 - 专注结束后显示 5 秒倒计时，并自动开始休息
 - `Cancel auto-start`：取消当前自动休息倒计时，保留“等待休息”状态
 - 休息结束后等待用户确认，不会自动开始下一轮专注
-- 菜单保持打开时，当前阶段的 `MM:SS` 倒计时会实时刷新
-- 开发环境中的专注和休息 `1 sec (test)`：快速验证两种完成提醒；正式导出时隐藏
-- 在菜单中关闭 `Always on top`：取消始终置顶
+- 顶层菜单或 `Focus` 子菜单保持打开时，当前阶段的 `MM:SS` 倒计时会实时刷新
+- `Developer` 子菜单中的专注和休息 `1 sec (test)`：快速验证两种完成提醒；正式导出时整个子菜单隐藏
+- `Window` 子菜单中的 `Always on top`：切换始终置顶
+- `Window` 子菜单中的 `Scale`：切换宠物显示比例
+- `Reminders` 子菜单：独立开启或关闭喝水与站立提醒，并实时查看下一次提醒倒计时
+- `Settings` → `Set timer & reminder durations…`：打开独立窗口，一次设置 Focus、Break、Water、Stand 和 Snooze 的默认分钟数
+- 保存的新时长从下一轮开始生效；已经运行中的专注、休息或健康提醒保留原截止时间
+- `Quiet hours`：点击后在关闭和三个跨午夜预设之间切换；勿扰期间到期的提醒保持待处理，结束后再显示
+- 健康提醒到点后可选择 `Complete`、`Snooze — 10 min`、`Skip`、`Pause ... today` 或关闭此类提醒
+- 提醒气泡中的 `Done` / `10 min`：直接完成或延后当前提醒；`More` 提供跳过本次、今天暂停和关闭喝水/站立提醒
+- `Done` 表示本次已完成，`Skip this time` 表示本次未完成但忽略；两者都会开始下一个正常周期。`Turn off ... reminders` 会停止该类周期，直到在 `Reminders` 菜单重新开启
+- 提醒气泡自动收起后，左键短按宠物可再次打开当前待处理提醒
+- `Developer` 子菜单中的喝水和站立 `1 sec (test)`：快速验证两种健康提醒；正式导出时隐藏
+- `Settings` → `Language…`：打开独立语言选择窗口；当前支持 English 和简体中文，选择会在重启后恢复
+- `Settings` → `Pet Notes…`：设置非专注时的宠物小纸条，并连接、同步或断开用户自己的 Google Calendar
+- Google Calendar 登录在系统浏览器完成，只申请日历列表与事件只读权限；同步层计划每 15 分钟刷新未来三天事件
+- 开发版会自动读取项目根目录中被 Git 忽略的 `client_secret*.json`，用于 Google Desktop OAuth token 交换；密钥不会写入普通设置或测试日志
+- refresh token 安全保存在当前 Windows 用户的凭据管理器中，重启后自动恢复登录；access token 仍只保存在进程内存。主动断开时会先持久禁止自动恢复，再删除已保存登录，因此立即退出也不会在下次启动重新连接
+- `Developer` → `Pet Note — 10 sec (test)`：验证图片内小纸条、按钮倒计时和自动关闭
+- 程序在 Windows 通知区域显示托盘图标；托盘菜单可显示/隐藏宠物、开始专注、打开 Pet Notes 或退出
+- 程序提供 Windows 通知区域托盘入口；主宠物窗口通过 `ITaskbarList::DeleteTab` 隐藏任务栏按钮，不修改 Godot 窗口样式
+- 宠物右键菜单保持无焦点窗口的稳定打开路径，并继续实时刷新计时状态；不得在菜单开关时切换透明主窗口焦点样式
 - 在菜单中点击 `Exit Desktop Pet`：退出
-- 宠物窗口获得焦点时按 `Ctrl+Q`：快速退出
 
 ## 项目结构
 
@@ -135,11 +181,32 @@ src/Activity/input_activity_monitor.gd
                                   活动启停、100ms 聚合与统一事件出口
 src/platform/windows/windows_activity_adapter.gd
                                   helper 进程、本地 UDP 和故障管理
+src/platform/windows/windows_taskbar_adapter.gd
+                                  只删除任务栏按钮的 Windows Shell 适配器
+src/platform/windows/windows_credential_store.gd
+                                  Windows 凭据 helper 会话与 OAuth 安全存取
 src/timers/timer_manager.gd       专注/休息计时、暂停和真实时间恢复
+src/timers/reminder_manager.gd    喝水/站立周期、延后、按日暂停和持久化
+src/localization/app_localization.gd
+                                  英语/简体中文用户界面词典与语言回退
+src/checkins/check_in_manager.gd  小纸条队列、去重、过期、冷却与显示时长
+src/checkins/calendar_check_in_source.gd
+                                  定时/全天日历事件的小纸条触发
+src/checkins/google_calendar_provider.gd
+                                  Google Desktop OAuth、只读同步与事件标准化
+assets/ui/tray_icon.svg           Windows 通知区域托盘图标
 platform/windows/activity_helper/ActivityHelper.cs
                                   Windows Raw Input helper 源码
 platform/windows/activity_helper/DesktopPetActivityHelper.exe
                                   开发运行所需的 x64 helper
+platform/windows/taskbar_helper/TaskbarHelper.cs
+                                  ITaskbarList::DeleteTab helper 源码
+platform/windows/taskbar_helper/DesktopPetTaskbarHelper.exe
+                                  开发运行所需的 x64 任务栏 helper
+platform/windows/credential_helper/CredentialHelper.cs
+                                  Windows Credential Manager helper 源码
+platform/windows/credential_helper/DesktopPetCredentialHelper.exe
+                                  开发运行所需的 x64 凭据 helper
 src/pets/pet_definition.gd        宠物资源格式
 src/pets/pet_registry.gd          自动发现、校验和排序宠物包
 src/pets/pet_visual.gd            所有宠物共用的显示与基础动作
@@ -147,6 +214,10 @@ assets/pets/leo/pet.tres          Leo 的宠物定义
 assets/pets/leo/leo-master.png    Leo 的透明背景母版
 assets/pets/bobo/pet.tres         Bobo 的宠物定义
 assets/pets/bobo/bobo-master.png  Bobo 的透明背景母版
+assets/pets/milo/pet.tres         Milo 的宠物定义
+assets/pets/milo/milo-master.png  Milo 的透明背景母版
+assets/pets/mable/pet.tres        Mable 的宠物定义
+assets/pets/mable/mable-master.png Mable 的透明背景母版
 launch.cmd                        可复制到其他 Windows PC 的便携启动入口
 tests/activity_pipeline_test.gd   活动管线无界面自测
 tests/windows_activity_adapter_test.gd
@@ -154,6 +225,21 @@ tests/windows_activity_adapter_test.gd
 tests/timer_manager_test.gd       计时状态与绝对时间恢复自测
 tests/focus_timer_integration_test.gd
                                   菜单、持久化和完成气泡集成自测
+tests/reminder_manager_test.gd    健康提醒周期、延后、暂停与恢复自测
+tests/health_reminder_integration_test.gd
+                                  健康提醒菜单、可点击气泡、语言与专注暂存集成自测
+tests/localization_test.gd         本地化目录完整性、语言回退与格式化自测
+tests/check_in_manager_test.gd     小纸条队列、过期与日历触发规则自测
+tests/ambient_card_integration_test.gd
+                                  图片内小纸条、倒计时、关闭与专注抑制集成自测
+tests/google_calendar_provider_test.gd
+                                  PKCE、回调解析、时区与 Google 事件标准化自测
+tests/windows_credential_store_test.gd
+                                  一次性假 token 的安全写入、读取和删除自测
+tests/google_calendar_disconnect_policy_test.gd
+                                  主动断连、立即重启与重新授权策略自测
+tests/system_tray_integration_test.gd
+                                  任务栏隐藏、托盘菜单和显示/隐藏行为自测
 ```
 
 ## 添加新宠物
@@ -171,11 +257,14 @@ tests/focus_timer_integration_test.gd
 ## 当前原型的已知限制
 
 - 只面向 Windows 11 验证。
-- 当前包含 Leo 和 Bobo 两个正式宠物包。
+- 当前包含 Leo、Bobo、Milo 和 Mable 四个正式宠物包。
 - Windows 活动 helper 当前只构建为 x64。
 - 真实键鼠活动仍需要在不同键盘、鼠标和长时间运行场景下继续实机验收。
-- 番茄钟当前固定为 25/5；尚无自定义时长、自动连续阶段、声音或专注历史。
+- 番茄钟支持自定义专注和休息默认分钟数；尚无自动连续阶段、声音或专注历史。
+- 健康提醒支持自定义喝水、站立和延后分钟数以及勿扰时段；尚无声音、Windows 系统通知或完整的多分类设置页。
+- 宠物小纸条已完成 Google Calendar OAuth、只读同步和 Windows Credential Manager 持久登录；开发版通过被 Git 忽略的本地 JSON 提供 Desktop 客户端密钥，正式发行的 OAuth 客户端凭据方案与新闻数据源仍未完成。
+- 当前只提供 English 和简体中文；宠物名称仍使用宠物包中定义的专名。
 - 鼠标穿透区域是简化多边形，不是逐像素轮廓。
-- 目前没有系统托盘；退出请使用右键菜单。
+- 系统托盘第一阶段已完成；完整的计时与待处理提醒“活动托盘”仍未实现。
 - 独占全屏应用可能覆盖置顶窗口。
 - 每个新宠物包都需要配置能覆盖动作和特效的点击轮廓。

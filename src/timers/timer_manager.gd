@@ -9,6 +9,8 @@ enum Kind {
 	NONE,
 	FOCUS,
 	BREAK,
+	WATER,
+	STAND,
 }
 
 enum State {
@@ -135,7 +137,7 @@ func restore(snapshot_data: Dictionary) -> bool:
 	var saved_kind := int(snapshot_data.get("kind", Kind.NONE))
 	if (
 		saved_kind <= Kind.NONE
-		or saved_kind > Kind.BREAK
+		or saved_kind > Kind.STAND
 		or saved_state <= State.IDLE
 		or saved_state > State.WAITING_NEXT
 	):
@@ -168,7 +170,7 @@ func restore(snapshot_data: Dictionary) -> bool:
 				_next_kind_after(saved_kind)
 			)
 		)
-		if saved_next_kind <= Kind.NONE or saved_next_kind > Kind.BREAK:
+		if saved_next_kind <= Kind.NONE or saved_next_kind > Kind.STAND:
 			saved_next_kind = _next_kind_after(saved_kind)
 		kind = saved_kind
 		next_kind = saved_next_kind
@@ -212,6 +214,8 @@ func _next_kind_after(completed_kind: Kind) -> Kind:
 		return Kind.BREAK
 	if completed_kind == Kind.BREAK:
 		return Kind.FOCUS
+	if completed_kind == Kind.WATER or completed_kind == Kind.STAND:
+		return completed_kind
 	return Kind.NONE
 
 

@@ -6,6 +6,8 @@ const DEV_FOCUS_MENU_ID := 45
 const DEV_BREAK_MENU_ID := 46
 const CANCEL_AUTO_TRANSITION_MENU_ID := 47
 const TIMER_STATUS_MENU_ID := 40
+const FOCUS_SUBMENU_MENU_ID := 1
+const START_FOCUS_MENU_ID := 41
 
 var _failed := false
 
@@ -20,44 +22,105 @@ func _run() -> void:
 	await process_frame
 
 	_expect(
-		main.context_menu.get_item_index(DEV_FOCUS_MENU_ID) >= 0,
-		"development build must expose the one-second focus option"
+		main.context_menu.get_item_count() <= 10,
+		"top-level context menu must stay compact"
 	)
 	_expect(
-		main.context_menu.get_item_index(DEV_BREAK_MENU_ID) >= 0,
-		"development build must expose the one-second break option"
+		main.context_menu.get_item_index(FOCUS_SUBMENU_MENU_ID) >= 0,
+		"top-level context menu must expose live focus status"
 	)
 	_expect(
 		not main.context_menu.prefer_native_menu,
 		"context menu must remain Godot-driven for live timer updates"
 	)
+	_expect(
+		main.context_menu.get_item_index(START_FOCUS_MENU_ID) < 0,
+		"focus commands must not remain in the top-level menu"
+	)
+	_expect(
+		main.focus_menu.get_item_index(START_FOCUS_MENU_ID) >= 0,
+		"focus submenu must contain the normal focus command"
+	)
+	_expect(
+		main.developer_menu.get_item_index(DEV_FOCUS_MENU_ID) >= 0,
+		"developer submenu must expose the one-second focus option"
+	)
+	_expect(
+		main.developer_menu.get_item_index(DEV_BREAK_MENU_ID) >= 0,
+		"developer submenu must expose the one-second break option"
+	)
+	_expect(
+		main.pet_definitions.size() == 4
+		and main.pet_menu_id_to_pet_id.values().has(&"leo")
+		and main.pet_menu_id_to_pet_id.values().has(&"bobo")
+		and main.pet_menu_id_to_pet_id.values().has(&"milo")
+		and main.pet_menu_id_to_pet_id.values().has(&"mable"),
+		"pet registry and menu must discover Leo, Bobo, Milo, and Mable"
+	)
+	for submenu in [
+		main.focus_menu,
+		main.reminder_menu,
+		main.activity_menu,
+		main.pets_menu,
+		main.window_menu,
+		main.settings_menu,
+		main.developer_menu,
+	]:
+		_expect(
+			not submenu.prefer_native_menu,
+			"every submenu must remain rectangular and Godot-driven"
+		)
 	_test_focus_hotspot(main, &"leo")
 	_test_focus_hotspot(main, &"bobo")
+	_test_focus_hotspot(main, &"milo")
+	_test_focus_hotspot(main, &"mable")
 	main._select_pet(&"leo", false)
 	main._hide_notification()
 
-	main._start_timer(TimerManagerScript.Kind.FOCUS, 3)
+	main._start_timer(TimerManagerScript.Kind.FOCUS, 5)
 	main.context_menu.popup()
 	await process_frame
-	var timer_status_index: int = main.context_menu.get_item_index(
-		TIMER_STATUS_MENU_ID
+	var focus_title_index: int = main.context_menu.get_item_index(
+		FOCUS_SUBMENU_MENU_ID
 	)
-	var first_status: String = main.context_menu.get_item_text(
-		timer_status_index
+	var first_title: String = main.context_menu.get_item_text(
+		focus_title_index
 	)
 	await create_timer(1.3).timeout
-	var second_status: String = main.context_menu.get_item_text(
-		timer_status_index
+	var second_title: String = main.context_menu.get_item_text(
+		focus_title_index
 	)
 	_expect(
 		main.context_menu.visible,
 		"context menu must stay open while its timer text refreshes"
 	)
 	_expect(
-		first_status != second_status,
-		"visible context-menu countdown must change once per second"
+		first_title != second_title,
+		"visible top-level focus status must change once per second"
 	)
 	main.context_menu.hide()
+
+	main.focus_menu.popup()
+	await process_frame
+	var timer_status_index: int = main.focus_menu.get_item_index(
+		TIMER_STATUS_MENU_ID
+	)
+	var first_status: String = main.focus_menu.get_item_text(
+		timer_status_index
+	)
+	await create_timer(1.3).timeout
+	var second_status: String = main.focus_menu.get_item_text(
+		timer_status_index
+	)
+	_expect(
+		main.focus_menu.visible,
+		"focus submenu must stay open while its timer text refreshes"
+	)
+	_expect(
+		first_status != second_status,
+		"visible focus-submenu countdown must change once per second"
+	)
+	main.focus_menu.hide()
 	main.timer_manager.cancel()
 
 	main._start_timer(TimerManagerScript.Kind.FOCUS, 10)
