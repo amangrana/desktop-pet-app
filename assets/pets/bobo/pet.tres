@@ -7,8 +7,8 @@
 script = ExtResource("1_definition")
 pet_id = &"bobo"
 display_name = "Bobo"
-species = "Long-haired cat"
-description = "A fluffy, curious cat with enormous green eyes and a soft silver-golden coat."
+species = "British Longhair"
+description = "A fluffy British Longhair with enormous green eyes and a soft silver-golden coat."
 sort_order = 10
 idle_texture = ExtResource("2_texture")
 display_size = Vector2(230, 230)

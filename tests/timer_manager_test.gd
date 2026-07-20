@@ -123,6 +123,18 @@ func _run() -> void:
 		"one-second focus completion must point to a break"
 	)
 
+	var health_timer = _new_timer()
+	_expect(
+		health_timer.start_timer(TimerManagerScript.Kind.WATER, 1.0),
+		"generic timer must accept a health reminder kind"
+	)
+	_fake_now += 1.1
+	health_timer._process(0.0)
+	_expect(
+		health_timer.next_kind == TimerManagerScript.Kind.WATER,
+		"completed health timer must wait on the same reminder kind"
+	)
+
 	if _failed:
 		quit(1)
 		return

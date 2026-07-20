@@ -5,6 +5,10 @@ bin/
 obj/
 *.user
 
+# Local Google OAuth credentials. Never commit client secrets.
+/client_secret*.json
+/google_oauth_client*.json
+
 # Superseded local artwork snapshot; runtime assets live in assets/pets/leo.
 /assets/pets/pug/
 
