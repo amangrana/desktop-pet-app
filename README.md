@@ -162,7 +162,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 - `Settings` → `Language…`：打开独立语言选择窗口；当前支持 English 和简体中文，选择会在重启后恢复
 - `Settings` → `Pet Notes…`：设置非专注时的宠物小纸条，并连接、同步或断开用户自己的 Google Calendar
 - Google Calendar 登录在系统浏览器完成，只申请日历列表与事件只读权限；同步层计划每 15 分钟刷新未来三天事件
-- 开发版会自动读取项目根目录中被 Git 忽略的 `client_secret*.json`，用于 Google Desktop OAuth token 交换；密钥不会写入普通设置或测试日志
+- Google Calendar 默认使用内置 Desktop OAuth client ID 与 PKCE，不要求用户复制 OAuth JSON；在 Godot 编辑器中运行时，可用项目根目录中被 Git 忽略的 `client_secret*.json` 覆盖客户端配置
 - refresh token 安全保存在当前 Windows 用户的凭据管理器中，重启后自动恢复登录；access token 仍只保存在进程内存。主动断开时会先持久禁止自动恢复，再删除已保存登录，因此立即退出也不会在下次启动重新连接
 - `Developer` → `Pet Note — 10 sec (test)`：验证图片内小纸条、按钮倒计时和自动关闭
 - 程序在 Windows 通知区域显示托盘图标；托盘菜单可显示/隐藏宠物、开始专注、打开 Pet Notes 或退出
@@ -262,7 +262,7 @@ tests/system_tray_integration_test.gd
 - 真实键鼠活动仍需要在不同键盘、鼠标和长时间运行场景下继续实机验收。
 - 番茄钟支持自定义专注和休息默认分钟数；尚无自动连续阶段、声音或专注历史。
 - 健康提醒支持自定义喝水、站立和延后分钟数以及勿扰时段；尚无声音、Windows 系统通知或完整的多分类设置页。
-- 宠物小纸条已完成 Google Calendar OAuth、只读同步和 Windows Credential Manager 持久登录；开发版通过被 Git 忽略的本地 JSON 提供 Desktop 客户端密钥，正式发行的 OAuth 客户端凭据方案与新闻数据源仍未完成。
+- 宠物小纸条已完成 Google Calendar OAuth、只读同步和 Windows Credential Manager 持久登录；默认使用内置 Desktop client ID、PKCE 和无 secret 的公共客户端 token 交换，编辑器开发环境仍可用被 Git 忽略的本地 JSON 覆盖配置。正式公开发行前仍需建立独立生产 OAuth 项目并完成 Google 验证。
 - 当前只提供 English 和简体中文；宠物名称仍使用宠物包中定义的专名。
 - 鼠标穿透区域是简化多边形，不是逐像素轮廓。
 - 系统托盘第一阶段已完成；完整的计时与待处理提醒“活动托盘”仍未实现。

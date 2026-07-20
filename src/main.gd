@@ -331,6 +331,8 @@ func _build_check_in_pipeline() -> void:
 
 
 func _load_local_google_calendar_credentials() -> void:
+	if not OS.has_feature("editor"):
+		return
 	var project_directory := DirAccess.open("res://")
 	if project_directory == null:
 		return

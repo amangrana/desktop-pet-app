@@ -83,7 +83,7 @@ func load_client_credentials(path: String) -> bool:
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if not parsed is Dictionary:
 		return false
-	return _apply_client_credentials(parsed)
+	return _apply_client_credentials(parsed, true)
 
 
 func has_client_secret() -> bool:
@@ -93,9 +93,6 @@ func has_client_secret() -> bool:
 func connect_account() -> bool:
 	if client_id.is_empty():
 		_set_state(State.ERROR, "missing_client_id")
-		return false
-	if _client_secret.is_empty():
-		_set_state(State.ERROR, "missing_client_secret")
 		return false
 	_stop_callback_server()
 	_callback_server = TCPServer.new()
@@ -273,14 +270,15 @@ func _respond_to_browser(success: bool) -> void:
 
 func _exchange_authorization_code(code: String) -> void:
 	_request_mode = "authorization_code"
-	var body := _form_encode({
+	var fields := {
 		"client_id": client_id,
-		"client_secret": _client_secret,
 		"code": code,
 		"code_verifier": _code_verifier,
 		"grant_type": "authorization_code",
 		"redirect_uri": _redirect_uri,
-	})
+	}
+	_add_optional_client_secret(fields)
+	var body := _form_encode(fields)
 	var result := _token_request.request(
 		TOKEN_ENDPOINT,
 		PackedStringArray(["Content-Type: application/x-www-form-urlencoded"]),
@@ -295,12 +293,13 @@ func _refresh_access_token() -> bool:
 	if _refresh_token.is_empty():
 		return false
 	_request_mode = "refresh_token"
-	var body := _form_encode({
+	var fields := {
 		"client_id": client_id,
-		"client_secret": _client_secret,
 		"refresh_token": _refresh_token,
 		"grant_type": "refresh_token",
-	})
+	}
+	_add_optional_client_secret(fields)
+	var body := _form_encode(fields)
 	var result := _token_request.request(
 		TOKEN_ENDPOINT,
 		PackedStringArray(["Content-Type: application/x-www-form-urlencoded"]),
@@ -583,6 +582,11 @@ func _form_encode(values: Dictionary) -> String:
 	return "&".join(fields)
 
 
+func _add_optional_client_secret(fields: Dictionary) -> void:
+	if not _client_secret.is_empty():
+		fields["client_secret"] = _client_secret
+
+
 func _random_base64_url(byte_count: int) -> String:
 	var random_bytes := Crypto.new().generate_random_bytes(byte_count)
 	return _base64_url(Marshalls.raw_to_base64(random_bytes))
@@ -604,7 +608,10 @@ func _base64_url(value: String) -> String:
 	)
 
 
-func _apply_client_credentials(data: Dictionary) -> bool:
+func _apply_client_credentials(
+	data: Dictionary,
+	allow_client_id_override := false
+) -> bool:
 	var credentials = data.get("installed", {})
 	if not credentials is Dictionary:
 		return false
@@ -614,9 +621,13 @@ func _apply_client_credentials(data: Dictionary) -> bool:
 	var loaded_client_secret := str(
 		credentials.get("client_secret", "")
 	).strip_edges()
-	if loaded_client_id.is_empty() or loaded_client_secret.is_empty():
+	if loaded_client_id.is_empty():
 		return false
-	if not client_id.is_empty() and loaded_client_id != client_id:
+	if (
+		not allow_client_id_override
+		and not client_id.is_empty()
+		and loaded_client_id != client_id
+	):
 		return false
 	configure(loaded_client_id, loaded_client_secret)
 	return true
