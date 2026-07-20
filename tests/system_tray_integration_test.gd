@@ -41,6 +41,30 @@ func _run() -> void:
 		and main.windows_taskbar_adapter.helper_exists(),
 		"the safe Windows taskbar button helper must be packaged"
 	)
+	main._apply_scale(1.5, false)
+	var scaled_menus: Array[PopupMenu] = main._scalable_popup_menus()
+	var menus_scaled: bool = not scaled_menus.is_empty()
+	for menu in scaled_menus:
+		if (
+			menu.get_theme_font_size("font_size") != 20
+			or menu.get_theme_constant("v_separation") != 5
+		):
+			menus_scaled = false
+			break
+	_expect(
+		menus_scaled
+		and not main.tray_menu.has_theme_font_size_override("font_size"),
+		(
+			"150% pet scale must enlarge all Godot menus while the "
+			+ "native tray menu stays under Windows DPI control"
+		)
+	)
+	main._apply_scale(0.75, false)
+	_expect(
+		main.context_menu.get_theme_font_size("font_size") == 14,
+		"75% pet scale must use the compact readable menu font"
+	)
+	main._apply_scale(1.0, false)
 	main._set_pet_window_visible(false)
 	_expect(
 		not main.pet_window_visible,

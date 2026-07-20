@@ -49,6 +49,9 @@ const GOOGLE_CALENDAR_CLIENT_ID := (
 )
 const GOOGLE_CALENDAR_CREDENTIAL_PREFIX := "client_secret"
 const PET_NOTES_WINDOW_SIZE := Vector2i(420, 310)
+const MENU_FONT_SIZE_MIN := 14
+const MENU_FONT_SIZE_BASE := 16
+const MENU_FONT_SIZE_MAX := 20
 const QUIET_HOURS_PRESETS := [
 	Vector2i(-1, -1),
 	Vector2i(22, 8),
@@ -104,6 +107,12 @@ const MENU_EXIT := 90
 const MENU_PET_BASE := 1000
 
 const SETTINGS_FILE := "user://prototype-settings.cfg"
+const TEST_SETTINGS_FILE_PATTERN := (
+	"user://prototype-settings-test-%d.cfg"
+)
+
+static var _test_settings_file := ""
+static var _test_settings_initialized := false
 
 @onready var pet: PetVisual = $PetVisual
 
@@ -209,6 +218,7 @@ var google_calendar_credential_busy := false
 var google_calendar_credential_saved := false
 var google_calendar_credential_error := ""
 var google_calendar_credential_action := ""
+var recovered_legacy_test_settings := false
 
 
 func _ready() -> void:
@@ -1656,6 +1666,59 @@ func _create_submenu(node_name: String) -> PopupMenu:
 	return menu
 
 
+func _menu_font_size_for_scale(scale_factor: float) -> int:
+	return clampi(
+		roundi(
+			MENU_FONT_SIZE_BASE
+			+ (clampf(scale_factor, 0.75, 1.5) - 1.0) * 8.0
+		),
+		MENU_FONT_SIZE_MIN,
+		MENU_FONT_SIZE_MAX
+	)
+
+
+func _scalable_popup_menus() -> Array[PopupMenu]:
+	var menus: Array[PopupMenu] = []
+	for menu in [
+		context_menu,
+		focus_menu,
+		reminder_menu,
+		activity_menu,
+		pets_menu,
+		window_menu,
+		settings_menu,
+		developer_menu,
+		reminder_action_menu,
+	]:
+		if menu != null and not menu.prefer_native_menu:
+			menus.append(menu)
+	return menus
+
+
+func _apply_menu_scale() -> void:
+	var font_size := _menu_font_size_for_scale(settings.display_scale)
+	var menu_scale := float(font_size) / MENU_FONT_SIZE_BASE
+	for menu in _scalable_popup_menus():
+		menu.add_theme_font_size_override("font_size", font_size)
+		menu.add_theme_constant_override(
+			"v_separation",
+			roundi(4.0 * menu_scale)
+		)
+		menu.add_theme_constant_override(
+			"item_start_padding",
+			roundi(8.0 * menu_scale)
+		)
+		menu.add_theme_constant_override(
+			"item_end_padding",
+			roundi(8.0 * menu_scale)
+		)
+		menu.add_theme_constant_override(
+			"icon_max_width",
+			roundi(18.0 * menu_scale)
+		)
+		menu.reset_size()
+
+
 func _handle_mouse_button(button: InputEventMouseButton) -> void:
 	if (
 		_notification_is_actionable()
@@ -1933,6 +1996,7 @@ func _apply_scale(scale_factor: float, save := true) -> void:
 			roundi(12 * settings.display_scale)
 		)
 
+	_apply_menu_scale()
 	_update_mouse_passthrough(window_size)
 	window.position = _clamp_to_visible_screen(window.position, window_size)
 	_update_menu_checks()
@@ -3398,8 +3462,15 @@ func _refresh_localized_ui() -> void:
 func _load_settings() -> void:
 	settings.language = AppLocalizationScript.default_language()
 	var config := ConfigFile.new()
-	if config.load(SETTINGS_FILE) != OK:
+	var settings_file := _settings_file_path()
+	if config.load(settings_file) != OK:
 		return
+	recovered_legacy_test_settings = (
+		settings_file == SETTINGS_FILE
+		and _recover_legacy_test_settings(config)
+	)
+	if recovered_legacy_test_settings:
+		config.save(settings_file)
 
 	settings.always_on_top = config.get_value("window", "always_on_top", true)
 	settings.display_scale = clampf(
@@ -3566,7 +3637,94 @@ func _save_settings() -> void:
 	config.set_value("window", "has_saved_position", settings.has_saved_position)
 	config.set_value("window", "position_x", settings.window_position.x)
 	config.set_value("window", "position_y", settings.window_position.y)
-	config.save(SETTINGS_FILE)
+	config.save(_settings_file_path())
+
+
+func _settings_file_path() -> String:
+	var override_path := OS.get_environment(
+		"DESKTOP_PET_SETTINGS_FILE"
+	).strip_edges()
+	if not override_path.is_empty():
+		return override_path
+	if not _is_automated_test_run():
+		return SETTINGS_FILE
+	if _test_settings_file.is_empty():
+		_test_settings_file = TEST_SETTINGS_FILE_PATTERN % OS.get_process_id()
+	if not _test_settings_initialized:
+		_test_settings_initialized = true
+		if FileAccess.file_exists(_test_settings_file):
+			DirAccess.remove_absolute(
+				ProjectSettings.globalize_path(_test_settings_file)
+			)
+	return _test_settings_file
+
+
+func _is_automated_test_run() -> bool:
+	if DisplayServer.get_name() == "headless":
+		return true
+	for argument in OS.get_cmdline_args():
+		var normalized := str(argument).replace("\\", "/").to_lower()
+		if (
+			normalized.ends_with("_test.gd")
+			and (
+				normalized.begins_with("tests/")
+				or "/tests/" in normalized
+			)
+		):
+			return true
+	return false
+
+
+func _recover_legacy_test_settings(config: ConfigFile) -> bool:
+	if (
+		int(config.get_value(
+			"timer_defaults",
+			"focus_duration_seconds",
+			0
+		)) != 40 * 60
+		or int(config.get_value(
+			"timer_defaults",
+			"break_duration_seconds",
+			0
+		)) != 8 * 60
+	):
+		return false
+	var snapshot = config.get_value("reminders", "snapshot", {})
+	if not snapshot is Dictionary:
+		return false
+	var preferences = snapshot.get("preferences", {})
+	var water = snapshot.get("water", {})
+	var stand = snapshot.get("stand", {})
+	if (
+		not preferences is Dictionary
+		or not water is Dictionary
+		or not stand is Dictionary
+		or int(preferences.get("water_interval_seconds", 0)) != 75 * 60
+		or int(preferences.get("stand_interval_seconds", 0)) != 35 * 60
+		or int(preferences.get("snooze_seconds", 0)) != 15 * 60
+		or not bool(preferences.get("quiet_enabled", false))
+		or not bool(water.get("enabled", false))
+		or not bool(stand.get("enabled", false))
+	):
+		return false
+
+	config.set_value(
+		"timer_defaults",
+		"focus_duration_seconds",
+		FOCUS_DURATION_SECONDS
+	)
+	config.set_value(
+		"timer_defaults",
+		"break_duration_seconds",
+		BREAK_DURATION_SECONDS
+	)
+	config.set_value("timer", "state", TimerManagerScript.State.IDLE)
+	config.set_value("timer", "kind", TimerManagerScript.Kind.NONE)
+	config.set_value("timer", "next_kind", TimerManagerScript.Kind.NONE)
+	config.set_value("timer", "end_unix", 0.0)
+	config.set_value("timer", "paused_remaining", 0.0)
+	config.set_value("reminders", "snapshot", {})
+	return true
 
 
 func _shutdown() -> void:
