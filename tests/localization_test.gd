@@ -59,6 +59,42 @@ func _run() -> void:
 		) == "该喝点水啦，要不要喝几口？",
 		"Chinese reminder copy must be available"
 	)
+	_expect(
+		AppLocalizationScript.text(
+			AppLocalizationScript.ENGLISH,
+			"duration_settings_saved"
+		) == "Durations saved."
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"duration_settings_saved"
+		) == "时长已保存。",
+		"duration save confirmation must not call user values defaults"
+	)
+	_expect(
+		AppLocalizationScript.text(
+			AppLocalizationScript.ENGLISH,
+			"bubble_turn_off"
+		) == "Turn off"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"bubble_turn_off"
+		) == "关闭"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.ENGLISH,
+			"bubble_ok"
+		) == "OK"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"bubble_ok"
+		) == "知道了"
+		and not english.has("bubble_more")
+		and not english.has("bubble_skip")
+		and not english.has("bubble_pause_today"),
+		(
+			"health reminder bubbles must expose a bilingual direct "
+			+ "Turn off action without the removed More choices"
+		)
+	)
 
 	if _failed:
 		quit(1)

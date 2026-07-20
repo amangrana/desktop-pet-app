@@ -48,6 +48,8 @@ const DEV_FOCUS_DURATION_SECONDS := 1
 const DEV_BREAK_DURATION_SECONDS := 1
 const AUTO_BREAK_DELAY_SECONDS := 5.0
 const AUTO_TRANSITION_LATE_GRACE_SECONDS := 2.0
+const INFORMATION_NOTIFICATION_SECONDS := 2.5
+const COMPLETION_NOTIFICATION_SECONDS := 5.0
 const GOOGLE_CALENDAR_CLIENT_ID := (
 	GoogleOAuthClientConfigScript.DEFAULT_CLIENT_ID
 )
@@ -107,8 +109,6 @@ const MENU_WATER_REMINDER := 50
 const MENU_STAND_REMINDER := 51
 const MENU_COMPLETE_REMINDER := 52
 const MENU_SNOOZE_REMINDER := 53
-const MENU_SKIP_REMINDER := 54
-const MENU_PAUSE_REMINDER_TODAY := 55
 const MENU_REMINDER_STATUS := 56
 const MENU_DURATION_SETTINGS := 57
 const MENU_LANGUAGE_SETTINGS := 58
@@ -145,8 +145,7 @@ var notification_label: Label
 var notification_actions: HBoxContainer
 var notification_done_button: Button
 var notification_snooze_button: Button
-var notification_more_button: Button
-var reminder_action_menu: PopupMenu
+var notification_stop_button: Button
 var duration_settings_window: Window
 var duration_settings_content: VBoxContainer
 var duration_settings_scroll: ScrollContainer
@@ -234,6 +233,7 @@ var restoring_reminders := false
 var restoring_saved_state := true
 var notification_action_kind := TimerManagerScript.Kind.NONE
 var ambient_card_active := false
+var notification_confirmation_active := false
 var ambient_card_deadline_unix := 0.0
 var auto_transition_deadline_unix := 0.0
 var auto_break_delay_seconds := AUTO_BREAK_DELAY_SECONDS
@@ -243,6 +243,9 @@ var google_calendar_credential_busy := false
 var google_calendar_credential_saved := false
 var google_calendar_credential_error := ""
 var google_calendar_credential_action := ""
+var google_oauth_browser_handoff_active := false
+var google_oauth_restore_always_on_top := false
+var google_oauth_reopen_pet_notes := false
 var recovered_legacy_test_settings := false
 var duration_settings_resize_queued := false
 var duration_settings_base_note_height := -1
@@ -616,6 +619,8 @@ func _build_hud() -> void:
 	notification_label.text_overrun_behavior = (
 		TextServer.OVERRUN_TRIM_ELLIPSIS
 	)
+	notification_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	notification_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	notification_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	notification_label.add_theme_color_override("font_color", Color("#352B42"))
 	notification_label.add_theme_font_size_override("font_size", 14)
@@ -638,26 +643,10 @@ func _build_hud() -> void:
 	notification_snooze_button.pressed.connect(_handle_snooze_reminder)
 	notification_actions.add_child(notification_snooze_button)
 
-	notification_more_button = _create_notification_button()
-	notification_more_button.pressed.connect(_open_reminder_action_menu)
-	notification_actions.add_child(notification_more_button)
-
-	reminder_action_menu = _create_popup_menu("ReminderActionMenu")
-	reminder_action_menu.add_item(
-		_text("bubble_skip"),
-		MENU_SKIP_REMINDER
-	)
-	reminder_action_menu.add_item(
-		_text("bubble_pause_today"),
-		MENU_PAUSE_REMINDER_TODAY
-	)
-	reminder_action_menu.add_separator()
-	reminder_action_menu.add_item(
-		_text("stop_reminder"),
-		MENU_STOP_REMINDER
-	)
-	reminder_action_menu.id_pressed.connect(_handle_menu_item)
-	add_child(reminder_action_menu)
+	notification_stop_button = _create_notification_button()
+	_style_notification_stop_button(notification_stop_button)
+	notification_stop_button.pressed.connect(_handle_stop_reminder)
+	notification_actions.add_child(notification_stop_button)
 	_refresh_notification_action_texts()
 
 	notification_timer = Timer.new()
@@ -678,6 +667,23 @@ func _create_notification_button() -> Button:
 	button.custom_minimum_size = Vector2(62, 28)
 	button.add_theme_font_size_override("font_size", 12)
 	return button
+
+
+func _style_notification_stop_button(button: Button) -> void:
+	button.add_theme_color_override("font_color", Color("#6B2F3B"))
+	button.add_theme_color_override("font_hover_color", Color("#5C2430"))
+	button.add_theme_color_override("font_pressed_color", Color("#4B1C27"))
+	for state_data in [
+		["normal", Color("#F5DEE1")],
+		["hover", Color("#EFC9CE")],
+		["pressed", Color("#E4B6BD")],
+	]:
+		var style := StyleBoxFlat.new()
+		style.bg_color = state_data[1]
+		style.border_color = Color("#C98E98")
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(5)
+		button.add_theme_stylebox_override(str(state_data[0]), style)
 
 
 func _build_duration_settings_window() -> void:
@@ -819,7 +825,10 @@ func _open_duration_settings() -> void:
 	duration_spin_boxes["snooze"].value = (
 		reminder_manager.snooze_seconds() / 60.0
 	)
-	duration_settings_window.popup_centered(DURATION_SETTINGS_WINDOW_SIZE)
+	_popup_scaled_settings_window(
+		duration_settings_window,
+		DURATION_SETTINGS_WINDOW_SIZE
+	)
 	_queue_duration_settings_window_resize()
 
 
@@ -865,7 +874,10 @@ func _save_duration_settings() -> void:
 	_update_timer_menu()
 	_update_reminder_menu()
 	_save_settings()
-	_show_notification(_text("duration_settings_saved"), 3.0)
+	_show_notification(
+		_text("duration_settings_saved"),
+		INFORMATION_NOTIFICATION_SECONDS
+	)
 
 
 func _duration_input_minutes(field_key: String) -> int:
@@ -1040,7 +1052,10 @@ func _open_language_settings() -> void:
 		if str(language_option_button.get_item_metadata(index)) == current_language:
 			language_option_button.select(index)
 			break
-	language_settings_window.popup_centered(LANGUAGE_SETTINGS_WINDOW_SIZE)
+	_popup_scaled_settings_window(
+		language_settings_window,
+		LANGUAGE_SETTINGS_WINDOW_SIZE
+	)
 	_queue_language_settings_window_resize()
 
 
@@ -1400,7 +1415,10 @@ func _open_pet_notes_settings() -> void:
 		settings.calendar_notes_enabled
 	)
 	_refresh_pet_notes_settings_texts()
-	pet_notes_settings_window.popup_centered(PET_NOTES_WINDOW_SIZE)
+	_popup_scaled_settings_window(
+		pet_notes_settings_window,
+		PET_NOTES_WINDOW_SIZE
+	)
 	_queue_pet_notes_window_resize()
 
 
@@ -1442,8 +1460,40 @@ func _apply_pet_notes_settings() -> void:
 
 func _connect_google_calendar() -> void:
 	_apply_pet_notes_settings()
-	google_calendar_provider.connect_account()
+	_begin_google_oauth_browser_handoff()
+	if not google_calendar_provider.connect_account():
+		_end_google_oauth_browser_handoff()
 	_refresh_google_calendar_status()
+
+
+func _begin_google_oauth_browser_handoff() -> void:
+	if google_oauth_browser_handoff_active:
+		return
+	google_oauth_browser_handoff_active = true
+	google_oauth_reopen_pet_notes = (
+		pet_notes_settings_window != null
+		and pet_notes_settings_window.visible
+	)
+	var root_window := get_window()
+	google_oauth_restore_always_on_top = bool(settings.always_on_top)
+	if google_oauth_reopen_pet_notes:
+		pet_notes_settings_window.hide()
+	root_window.always_on_top = false
+
+
+func _end_google_oauth_browser_handoff() -> void:
+	if not google_oauth_browser_handoff_active:
+		return
+	google_oauth_browser_handoff_active = false
+	get_window().always_on_top = google_oauth_restore_always_on_top
+	var should_reopen := (
+		google_oauth_reopen_pet_notes
+		and not shutting_down
+	)
+	google_oauth_restore_always_on_top = false
+	google_oauth_reopen_pet_notes = false
+	if should_reopen:
+		_open_pet_notes_settings()
 
 
 func _sync_google_calendar() -> void:
@@ -1615,24 +1665,28 @@ func _resize_centered_settings_window(
 	configured_maximum_height: int,
 	extra_height: int
 ) -> void:
+	var scale := _current_settings_window_scale(window, base_size)
 	var maximum_height := configured_maximum_height
-	var screen := window.current_screen
-	if screen < 0:
-		screen = DisplayServer.get_primary_screen()
+	var screen := _settings_window_screen(window)
 	var usable_rect := DisplayServer.screen_get_usable_rect(screen)
 	var has_usable_screen := (
 		usable_rect.size.y
-		>= base_size.y + SETTINGS_WINDOW_SCREEN_MARGIN
+		>= roundi(base_size.y * scale) + SETTINGS_WINDOW_SCREEN_MARGIN
 	)
 	if has_usable_screen:
 		maximum_height = mini(
 			maximum_height,
 			maxi(
 				base_size.y,
-				usable_rect.size.y - SETTINGS_WINDOW_SCREEN_MARGIN
+				floori(
+					(
+						usable_rect.size.y
+						- SETTINGS_WINDOW_SCREEN_MARGIN
+					) / scale
+				)
 			)
 		)
-	var target_size := Vector2i(
+	var target_content_size := Vector2i(
 		base_size.x,
 		clampi(
 			base_size.y + extra_height,
@@ -1640,12 +1694,90 @@ func _resize_centered_settings_window(
 			maximum_height
 		)
 	)
-	window.size = target_size
+	var target_window_size := Vector2i(
+		roundi(target_content_size.x * scale),
+		roundi(target_content_size.y * scale)
+	)
+	window.min_size = Vector2i.ZERO
+	window.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	window.content_scale_size = target_content_size
+	window.size = target_window_size
+	window.min_size = Vector2i(
+		roundi(base_size.x * scale),
+		roundi(base_size.y * scale)
+	)
 	if window.visible and has_usable_screen:
 		window.position = (
 			usable_rect.position
-			+ (usable_rect.size - target_size) / 2
+			+ (usable_rect.size - target_window_size) / 2
 		)
+
+
+func _popup_scaled_settings_window(
+	window: Window,
+	base_size: Vector2i
+) -> void:
+	var scale := _settings_window_scale(window, base_size)
+	var target_size := Vector2i(
+		roundi(base_size.x * scale),
+		roundi(base_size.y * scale)
+	)
+	window.min_size = Vector2i.ZERO
+	window.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	window.content_scale_size = base_size
+	window.size = target_size
+	window.min_size = target_size
+	window.popup_centered(target_size)
+
+
+func _settings_window_scale(
+	window: Window,
+	base_size: Vector2i
+) -> float:
+	var scale := clampf(
+		float(settings.display_scale),
+		DISPLAY_SCALE_MIN,
+		DISPLAY_SCALE_MAX
+	)
+	var usable_rect := DisplayServer.screen_get_usable_rect(
+		_settings_window_screen(window)
+	)
+	if usable_rect.size.x > SETTINGS_WINDOW_SCREEN_MARGIN:
+		scale = minf(
+			scale,
+			float(
+				usable_rect.size.x - SETTINGS_WINDOW_SCREEN_MARGIN
+			) / float(base_size.x)
+		)
+	if usable_rect.size.y > SETTINGS_WINDOW_SCREEN_MARGIN:
+		scale = minf(
+			scale,
+			float(
+				usable_rect.size.y - SETTINGS_WINDOW_SCREEN_MARGIN
+			) / float(base_size.y)
+		)
+	return maxf(DISPLAY_SCALE_MIN, scale)
+
+
+func _current_settings_window_scale(
+	window: Window,
+	base_size: Vector2i
+) -> float:
+	if window.content_scale_size.x > 0 and window.size.x > 0:
+		return maxf(
+			DISPLAY_SCALE_MIN,
+			float(window.size.x) / float(window.content_scale_size.x)
+		)
+	return _settings_window_scale(window, base_size)
+
+
+func _settings_window_screen(window: Window) -> int:
+	if window.current_screen >= 0:
+		return window.current_screen
+	var root_screen := get_window().current_screen
+	if root_screen >= 0:
+		return root_screen
+	return DisplayServer.get_primary_screen()
 
 
 func _wrapped_label_height(
@@ -1682,6 +1814,7 @@ func _google_calendar_error_message(code: String) -> String:
 		return _text("google_calendar_error_browser")
 	if code in [
 		"access_denied",
+		"authorization_timeout",
 		"authorization_required",
 		"token_request_failed",
 		"token_refresh_failed",
@@ -1717,6 +1850,8 @@ func _refresh_notification_action_texts() -> void:
 		return
 	if ambient_card_active:
 		_update_ambient_card_button()
+	elif notification_confirmation_active:
+		notification_done_button.text = _text("bubble_ok")
 	else:
 		notification_done_button.text = _text("bubble_done")
 	var snooze_seconds := ReminderManagerScript.SNOOZE_SECONDS
@@ -1726,26 +1861,7 @@ func _refresh_notification_action_texts() -> void:
 		"bubble_snooze",
 		[_format_setting_duration(snooze_seconds)]
 	)
-	notification_more_button.text = _text("bubble_more")
-	_set_menu_text(
-		reminder_action_menu,
-		MENU_SKIP_REMINDER,
-		_text("bubble_skip")
-	)
-	_set_menu_text(
-		reminder_action_menu,
-		MENU_PAUSE_REMINDER_TODAY,
-		_text("bubble_pause_today")
-	)
-	var due_kind := notification_action_kind
-	var due_name := _reminder_kind_name(due_kind).to_lower()
-	_set_menu_text(
-		reminder_action_menu,
-		MENU_STOP_REMINDER,
-		_text("bubble_stop_named", [due_name])
-		if due_kind != TimerManagerScript.Kind.NONE
-		else _text("stop_reminder")
-	)
+	notification_stop_button.text = _text("bubble_turn_off")
 
 
 func _build_context_menu() -> void:
@@ -1798,11 +1914,6 @@ func _build_context_menu() -> void:
 			[_format_setting_duration(reminder_manager.snooze_seconds())]
 		),
 		MENU_SNOOZE_REMINDER
-	)
-	reminder_menu.add_item(_text("skip_reminder"), MENU_SKIP_REMINDER)
-	reminder_menu.add_item(
-		_text("pause_reminder_today"),
-		MENU_PAUSE_REMINDER_TODAY
 	)
 	reminder_menu.add_item(
 		_text("stop_reminder"),
@@ -2004,7 +2115,6 @@ func _scalable_popup_menus() -> Array[PopupMenu]:
 		window_menu,
 		settings_menu,
 		developer_menu,
-		reminder_action_menu,
 	]:
 		if menu != null and not menu.prefer_native_menu:
 			menus.append(menu)
@@ -2037,15 +2147,14 @@ func _apply_menu_scale() -> void:
 
 func _handle_mouse_button(button: InputEventMouseButton) -> void:
 	if (
-		_notification_is_actionable()
-		and notification_panel.visible
+		notification_panel.visible
 		and Rect2(
 			notification_panel.position,
 			notification_panel.size
 		).has_point(button.position)
 	):
-		# Let the Control buttons receive the click instead of starting a
-		# pet drag in the scene-level input handler.
+		# Let actionable Control buttons receive the click, and prevent
+		# informational bubble clicks from starting a pet drag.
 		return
 
 	if button.button_index == MOUSE_BUTTON_RIGHT and button.pressed:
@@ -2119,17 +2228,20 @@ func _handle_focus_hotspot_tap() -> void:
 					)
 				]
 			),
-			3.0
+			INFORMATION_NOTIFICATION_SECONDS
 		)
 		return
 
 	if _has_auto_transition():
 		notification_timer.stop()
-		notification_panel.visible = true
 		_update_auto_break_countdown()
+		_present_notification_panel()
 		return
 
-	_show_notification(_timer_status_summary(), 3.0)
+	_show_notification(
+		_timer_status_summary(),
+		INFORMATION_NOTIFICATION_SECONDS
+	)
 
 
 func _handle_menu_item(id: int) -> void:
@@ -2188,10 +2300,6 @@ func _handle_menu_item(id: int) -> void:
 			_handle_complete_reminder()
 		MENU_SNOOZE_REMINDER:
 			_handle_snooze_reminder()
-		MENU_SKIP_REMINDER:
-			_handle_skip_reminder()
-		MENU_PAUSE_REMINDER_TODAY:
-			_handle_pause_reminder_today()
 		MENU_STOP_REMINDER:
 			_handle_stop_reminder()
 		MENU_DEV_WATER_1S:
@@ -2312,7 +2420,7 @@ func _apply_scale(scale_factor: float, save := true) -> void:
 	for button in [
 		notification_done_button,
 		notification_snooze_button,
-		notification_more_button,
+		notification_stop_button,
 	]:
 		button.custom_minimum_size = (
 			Vector2(62, 28) * settings.display_scale
@@ -2331,7 +2439,10 @@ func _apply_scale(scale_factor: float, save := true) -> void:
 		_save_settings()
 
 
-func _update_mouse_passthrough(window_size: Vector2i) -> void:
+func _update_mouse_passthrough(
+	window_size: Vector2i,
+	include_notification := false
+) -> void:
 	var center := Vector2(
 		window_size.x / 2.0,
 		window_size.y / 2.0 - 2 * settings.display_scale
@@ -2341,24 +2452,47 @@ func _update_mouse_passthrough(window_size: Vector2i) -> void:
 	for point in source_polygon:
 		scaled_polygon.append(center + point * settings.display_scale)
 	if (
-		_notification_is_actionable()
-		and notification_panel != null
-		and notification_panel.visible
+		notification_panel != null
+		and (
+			notification_panel.visible
+			or include_notification
+		)
 	):
 		var bubble_rect := Rect2(
 			notification_panel.position,
 			notification_panel.size
 		)
-		scaled_polygon.append(bubble_rect.position)
-		scaled_polygon.append(
-			bubble_rect.position + Vector2(bubble_rect.size.x, 0)
+		scaled_polygon = _merge_passthrough_rect(
+			scaled_polygon,
+			bubble_rect
 		)
-		scaled_polygon.append(bubble_rect.end)
-		scaled_polygon.append(
-			bubble_rect.position + Vector2(0, bubble_rect.size.y)
-		)
-		scaled_polygon = Geometry2D.convex_hull(scaled_polygon)
 	get_window().mouse_passthrough_polygon = scaled_polygon
+
+
+func _merge_passthrough_rect(
+	source_polygon: PackedVector2Array,
+	rect: Rect2
+) -> PackedVector2Array:
+	var rect_polygon := PackedVector2Array([
+		rect.position,
+		rect.position + Vector2(rect.size.x, 0),
+		rect.end,
+		rect.position + Vector2(0, rect.size.y),
+	])
+	var merged_polygons := Geometry2D.merge_polygons(
+		source_polygon,
+		rect_polygon
+	)
+	if merged_polygons.size() == 1:
+		return merged_polygons[0]
+
+	# Current bubbles overlap every supported pet at every display scale.
+	# Keep a safe rendering fallback if a future pet or layout breaks that
+	# invariant, because Windows also uses this polygon as the window shape.
+	var combined_points := source_polygon.duplicate()
+	for point in rect_polygon:
+		combined_points.append(point)
+	return Geometry2D.convex_hull(combined_points)
 
 
 func _layout_notification_panel() -> void:
@@ -2615,20 +2749,6 @@ func _update_reminder_menu() -> void:
 	)
 	_set_menu_text(
 		reminder_menu,
-		MENU_SKIP_REMINDER,
-		_text("skip_named_reminder", [due_name])
-		if has_due
-		else _text("skip_reminder")
-	)
-	_set_menu_text(
-		reminder_menu,
-		MENU_PAUSE_REMINDER_TODAY,
-		_text("pause_named_reminder_today", [due_name])
-		if has_due
-		else _text("pause_reminder_today")
-	)
-	_set_menu_text(
-		reminder_menu,
 		MENU_STOP_REMINDER,
 		_text("stop_named_reminder", [due_name])
 		if has_due
@@ -2637,8 +2757,6 @@ func _update_reminder_menu() -> void:
 	for menu_id in [
 		MENU_COMPLETE_REMINDER,
 		MENU_SNOOZE_REMINDER,
-		MENU_SKIP_REMINDER,
-		MENU_PAUSE_REMINDER_TODAY,
 		MENU_STOP_REMINDER,
 	]:
 		_set_menu_disabled(reminder_menu, menu_id, not has_due)
@@ -2930,16 +3048,16 @@ func _handle_timer_completed(kind: int) -> void:
 	pet.react_to_reminder()
 	if kind == TimerManagerScript.Kind.FOCUS:
 		if restoring_timer:
-			_show_notification(
+			_show_confirmation_notification(
 				_text("focus_complete_ready"),
-				10.0
+				COMPLETION_NOTIFICATION_SECONDS
 			)
 		else:
 			_begin_auto_break_countdown()
 	elif kind == TimerManagerScript.Kind.BREAK:
-		_show_notification(
+		_show_confirmation_notification(
 			_text("break_complete"),
-			10.0
+			COMPLETION_NOTIFICATION_SECONDS
 		)
 
 
@@ -3028,9 +3146,14 @@ func _handle_calendar_event_ready(event_data: Dictionary) -> void:
 
 
 func _handle_google_calendar_state_changed(
-	_state: int,
+	next_state: int,
 	_message: String
 ) -> void:
+	if (
+		google_oauth_browser_handoff_active
+		and next_state != GoogleCalendarProviderScript.State.CONNECTING
+	):
+		_end_google_oauth_browser_handoff()
 	_refresh_google_calendar_status()
 
 
@@ -3154,7 +3277,7 @@ func _toggle_reminder(kind: int) -> void:
 					reminder_manager.interval_seconds(kind)
 				),
 			]),
-			4.0
+			INFORMATION_NOTIFICATION_SECONDS
 		)
 	else:
 		var disabled_key := (
@@ -3164,7 +3287,7 @@ func _toggle_reminder(kind: int) -> void:
 		)
 		_show_notification(
 			_text(disabled_key),
-			3.0
+			INFORMATION_NOTIFICATION_SECONDS
 		)
 
 
@@ -3194,13 +3317,16 @@ func _cycle_quiet_hours() -> void:
 	if enabled:
 		_show_notification(
 			_text("quiet_hours_updated", [start_hour, end_hour]),
-			4.0
+			INFORMATION_NOTIFICATION_SECONDS
 		)
 	else:
 		if reminder_manager.current_due_kind() != TimerManagerScript.Kind.NONE:
 			_show_pending_health_reminder()
 		else:
-			_show_notification(_text("quiet_hours_disabled"), 3.0)
+			_show_notification(
+				_text("quiet_hours_disabled"),
+				INFORMATION_NOTIFICATION_SECONDS
+			)
 
 
 func _handle_complete_reminder() -> void:
@@ -3215,7 +3341,7 @@ func _handle_complete_reminder() -> void:
 					reminder_manager.interval_seconds(kind)
 				),
 			]),
-			5.0
+			INFORMATION_NOTIFICATION_SECONDS
 		)
 
 
@@ -3231,38 +3357,7 @@ func _handle_snooze_reminder() -> void:
 					reminder_manager.snooze_seconds()
 				),
 			]),
-			4.0
-		)
-
-
-func _handle_skip_reminder() -> void:
-	var kind: int = reminder_manager.current_due_kind()
-	if reminder_manager.skip_due() == TimerManagerScript.Kind.NONE:
-		return
-	if not _show_pending_health_reminder():
-		_show_notification(
-			_text(
-				"skipped",
-				[_reminder_kind_name(kind).to_lower()]
-			),
-			4.0
-		)
-
-
-func _handle_pause_reminder_today() -> void:
-	var kind: int = reminder_manager.current_due_kind()
-	if (
-		reminder_manager.pause_due_today()
-		== TimerManagerScript.Kind.NONE
-	):
-		return
-	if not _show_pending_health_reminder():
-		_show_notification(
-			_text(
-				"paused_until_tomorrow",
-				[_reminder_kind_name(kind)]
-			),
-			5.0
+			INFORMATION_NOTIFICATION_SECONDS
 		)
 
 
@@ -3279,7 +3374,7 @@ func _handle_stop_reminder() -> void:
 			_text("stopped_reminders", [
 				_reminder_kind_name(kind),
 			]),
-			5.0
+			INFORMATION_NOTIFICATION_SECONDS
 		)
 
 
@@ -3314,15 +3409,18 @@ func _focus_is_running() -> bool:
 
 func _begin_auto_break_countdown() -> void:
 	_cancel_auto_transition(false)
+	notification_panel.visible = false
 	_set_notification_actions(TimerManagerScript.Kind.NONE)
+	notification_confirmation_active = true
+	_configure_confirmation_actions()
 	auto_transition_deadline_unix = (
 		Time.get_unix_time_from_system()
 		+ maxf(0.1, auto_break_delay_seconds)
 	)
 	auto_transition_timer.start()
 	notification_timer.stop()
-	notification_panel.visible = true
 	_update_auto_break_countdown()
+	_present_notification_panel()
 
 
 func _handle_auto_transition_tick() -> void:
@@ -3369,9 +3467,9 @@ func _cancel_auto_transition(show_ready_message: bool) -> void:
 		and timer_manager.state == TimerManagerScript.State.WAITING_NEXT
 		and timer_manager.next_kind == TimerManagerScript.Kind.BREAK
 	):
-		_show_notification(
+		_show_confirmation_notification(
 			_text("focus_complete_ready"),
-			10.0
+			COMPLETION_NOTIFICATION_SECONDS
 		)
 	_update_timer_menu()
 
@@ -3398,14 +3496,39 @@ func _auto_transition_remaining_seconds() -> int:
 
 
 func _show_notification(message: String, duration_seconds: float) -> void:
+	notification_panel.visible = false
 	_set_notification_actions(TimerManagerScript.Kind.NONE)
 	notification_label.text = message
-	notification_panel.visible = true
+	_present_notification_panel()
 	notification_timer.start(maxf(1.0, duration_seconds))
+
+
+func _show_confirmation_notification(
+	message: String,
+	duration_seconds: float
+) -> void:
+	notification_panel.visible = false
+	_set_notification_actions(TimerManagerScript.Kind.NONE)
+	notification_confirmation_active = true
+	notification_label.text = message
+	_configure_confirmation_actions()
+	_present_notification_panel()
+	notification_timer.start(maxf(1.0, duration_seconds))
+
+
+func _configure_confirmation_actions() -> void:
+	notification_actions.visible = true
+	notification_done_button.visible = true
+	notification_snooze_button.visible = false
+	notification_stop_button.visible = false
+	notification_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_refresh_notification_action_texts()
+	_layout_notification_panel()
 
 
 func _show_ambient_card(message: String, duration_seconds: int) -> void:
 	_clear_ambient_card_state()
+	notification_confirmation_active = false
 	notification_panel.visible = false
 	notification_action_kind = TimerManagerScript.Kind.NONE
 	ambient_card_active = true
@@ -3421,7 +3544,7 @@ func _show_ambient_card(message: String, duration_seconds: int) -> void:
 	notification_actions.visible = true
 	notification_done_button.visible = true
 	notification_snooze_button.visible = false
-	notification_more_button.visible = false
+	notification_stop_button.visible = false
 	notification_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_update_ambient_card_button()
 	_layout_notification_panel()
@@ -3434,20 +3557,30 @@ func _present_ambient_card() -> void:
 	if not ambient_card_active:
 		return
 	_layout_notification_panel()
-	notification_panel.visible = true
-	_update_mouse_passthrough(get_window().size)
+	_present_notification_panel()
 
 
 func _show_actionable_notification(kind: int, message: String) -> void:
+	notification_panel.visible = false
 	_set_notification_actions(kind)
 	notification_label.text = message
-	notification_panel.visible = true
+	_present_notification_panel()
 	notification_timer.start(10.0)
-	_update_mouse_passthrough(get_window().size)
+
+
+func _present_notification_panel() -> void:
+	if notification_panel == null:
+		return
+	# On Windows the passthrough polygon is also the visible window shape.
+	# Expand that shape before revealing the Control so the first rendered
+	# frame cannot be clipped to the pet's alpha outline.
+	_update_mouse_passthrough(get_window().size, true)
+	notification_panel.visible = true
 
 
 func _set_notification_actions(kind: int) -> void:
 	_clear_ambient_card_state()
+	notification_confirmation_active = false
 	notification_action_kind = kind
 	if notification_actions == null:
 		return
@@ -3455,7 +3588,7 @@ func _set_notification_actions(kind: int) -> void:
 	notification_actions.visible = actionable
 	notification_done_button.visible = true
 	notification_snooze_button.visible = true
-	notification_more_button.visible = true
+	notification_stop_button.visible = true
 	notification_panel.mouse_filter = (
 		Control.MOUSE_FILTER_STOP
 		if actionable
@@ -3463,12 +3596,10 @@ func _set_notification_actions(kind: int) -> void:
 	)
 	_refresh_notification_action_texts()
 	_layout_notification_panel()
-	if get_window().size.x > 0:
-		_update_mouse_passthrough(get_window().size)
 
 
 func _handle_primary_notification_action() -> void:
-	if ambient_card_active:
+	if ambient_card_active or notification_confirmation_active:
 		_hide_notification()
 		return
 	_handle_complete_reminder()
@@ -3515,15 +3646,9 @@ func _clear_ambient_card_state() -> void:
 func _notification_is_actionable() -> bool:
 	return (
 		ambient_card_active
+		or notification_confirmation_active
 		or notification_action_kind != TimerManagerScript.Kind.NONE
 	)
-
-
-func _open_reminder_action_menu() -> void:
-	if notification_action_kind == TimerManagerScript.Kind.NONE:
-		return
-	reminder_action_menu.position = DisplayServer.mouse_get_position()
-	reminder_action_menu.popup()
 
 
 func _hide_notification() -> void:
@@ -3531,10 +3656,10 @@ func _hide_notification() -> void:
 		notification_timer.stop()
 	if notification_panel != null:
 		notification_panel.visible = false
-	if reminder_action_menu != null:
-		reminder_action_menu.hide()
 	_clear_ambient_card_state()
 	_set_notification_actions(TimerManagerScript.Kind.NONE)
+	if get_window().size.x > 0:
+		_update_mouse_passthrough(get_window().size)
 
 
 func _update_activity_menu() -> void:
