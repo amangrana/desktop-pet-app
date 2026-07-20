@@ -24,6 +24,30 @@ func _run() -> void:
 	)
 	await _expect_scaled_window(
 		main,
+		main.quiet_settings_window,
+		Vector2i(410, 330),
+		main._open_quiet_settings,
+		"Quiet hours settings"
+	)
+	_expect(
+		main.quiet_start_option.get_popup().max_size.y
+		== main.quiet_end_option.get_popup().max_size.y
+		and not main.quiet_start_option.get_popup().wrap_controls
+		and main.quiet_start_option.get_popup().min_size.x
+		== main.quiet_start_option.get_popup().max_size.x
+		and main.quiet_start_option.get_popup().min_size.x
+		>= roundi(main.QUIET_HOUR_POPUP_LOGICAL_WIDTH * 2.0)
+		and main.quiet_start_option.get_popup().size.y
+		== main.quiet_start_option.get_popup().max_size.y
+		and main.quiet_start_option.get_popup().max_size.y >= 280
+		and main.quiet_start_option.get_popup().max_size.y <= 480,
+		(
+			"quiet-hour dropdown height must follow the settings UI "
+			+ "scale while respecting limited screen height"
+		)
+	)
+	await _expect_scaled_window(
+		main,
 		main.language_settings_window,
 		Vector2i(390, 250),
 		main._open_language_settings,

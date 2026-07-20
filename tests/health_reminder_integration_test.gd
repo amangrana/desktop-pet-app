@@ -70,6 +70,16 @@ func _run() -> void:
 		"Settings must expose one scalable language window entry"
 	)
 	_expect(
+		main.settings_menu.get_item_index(QUIET_HOURS_MENU_ID) >= 0
+		and main.reminder_menu.get_item_index(
+			QUIET_HOURS_MENU_ID
+		) >= 0,
+		(
+			"quiet hours must open the same settings window from "
+			+ "Settings and Reminders"
+		)
+	)
+	_expect(
 		main.developer_menu.get_item_index(DEV_WATER_MENU_ID) >= 0,
 		"developer menu must expose the one-second water reminder"
 	)
@@ -442,9 +452,73 @@ func _run() -> void:
 	)
 	main._handle_menu_item(QUIET_HOURS_MENU_ID)
 	_expect(
-		main.reminder_manager.quiet_hours_enabled()
-		and main.reminder_manager.is_quiet_now(),
-		"quiet-hours menu must enable the 22:00–08:00 preset"
+		main.quiet_settings_window.visible
+		and not main.reminder_manager.quiet_hours_enabled()
+		and main._quiet_option_hour(main.quiet_start_option) == 22
+		and main._quiet_option_hour(main.quiet_end_option) == 8
+		and main.quiet_start_option.item_count == 24
+		and not main.quiet_start_option.get_popup().wrap_controls
+		and main.quiet_start_option.get_popup().min_size.x > 0
+		and main.quiet_start_option.get_popup().min_size.y
+		== main.quiet_start_option.get_popup().max_size.y
+		and main.quiet_start_option.get_popup().max_size.y > 0
+		and main.quiet_start_option.get_popup().max_size.y
+		< main.quiet_start_option.item_count * 24,
+		(
+			"opening quiet hours must load saved values without "
+			+ "changing the schedule, and the hour list must use a "
+			+ "short scrollable popup"
+		)
+	)
+	main.quiet_enabled_check.button_pressed = true
+	main.quiet_start_option.select(21)
+	main.quiet_end_option.select(21)
+	main._update_quiet_settings_form()
+	_expect(
+		main.quiet_save_button.disabled
+		and main.quiet_validation_label.visible,
+		"equal quiet-hour endpoints must show validation and block Save"
+	)
+	main.quiet_end_option.select(7)
+	main._update_quiet_settings_form()
+	main.quiet_save_button.pressed.emit()
+	_expect(
+		not main.quiet_settings_window.visible
+		and main.reminder_manager.quiet_hours_enabled()
+		and main.reminder_manager.quiet_start_hour() == 21
+		and main.reminder_manager.quiet_end_hour() == 7
+		and main.reminder_manager.is_quiet_now()
+		and main.reminder_menu.is_item_checked(
+			main.reminder_menu.get_item_index(QUIET_HOURS_MENU_ID)
+		)
+		and main.settings_menu.is_item_checked(
+			main.settings_menu.get_item_index(QUIET_HOURS_MENU_ID)
+		)
+		and main.reminder_menu.get_item_text(
+			main.reminder_menu.get_item_index(QUIET_HOURS_MENU_ID)
+		) == "勿扰时段：21:00–07:00"
+		and main.reminder_menu.get_item_icon_modulate(
+			main.reminder_menu.get_item_index(QUIET_HOURS_MENU_ID)
+		) == main.QUIET_STATUS_ACTIVE_COLOR,
+		(
+			"quiet-hours form must save the selected 21:00–07:00 "
+			+ "range, check both menu entries, and use the active color"
+		)
+	)
+	main._handle_menu_item(QUIET_HOURS_MENU_ID)
+	_expect(
+		main.quiet_settings_window.visible
+		and main._quiet_option_hour(main.quiet_start_option) == 21
+		and main._quiet_option_hour(main.quiet_end_option) == 7,
+		"reopening quiet hours must preserve values instead of cycling"
+	)
+	main.quiet_start_option.select(20)
+	main.quiet_cancel_button.pressed.emit()
+	_expect(
+		not main.quiet_settings_window.visible
+		and main.reminder_manager.quiet_start_hour() == 21
+		and main.reminder_manager.quiet_end_hour() == 7,
+		"Cancel must discard form changes without mutating quiet hours"
 	)
 	main._start_timer(TimerManagerScript.Kind.FOCUS, 30)
 	main._handle_menu_item(DEV_STAND_MENU_ID)
@@ -473,7 +547,13 @@ func _run() -> void:
 	_expect(
 		main.notification_panel.visible
 		and "伸伸懒腰" in main.notification_label.text
-		and main.notification_done_button.text == "完成",
+		and main.notification_done_button.text == "完成"
+		and main.reminder_menu.get_item_text(
+			main.reminder_menu.get_item_index(QUIET_HOURS_MENU_ID)
+		) == "勿扰时段：21:00–07:00"
+		and main.reminder_menu.get_item_icon_modulate(
+			main.reminder_menu.get_item_index(QUIET_HOURS_MENU_ID)
+		) == main.QUIET_STATUS_INACTIVE_COLOR,
 		"reminder must surface in Chinese after quiet hours end: %s"
 		% main.notification_label.text
 	)
@@ -488,7 +568,9 @@ func _run() -> void:
 		and int(saved_snapshot.preferences.stand_interval_seconds)
 		== 35 * 60
 		and int(saved_snapshot.preferences.snooze_seconds) == 15 * 60
-		and bool(saved_snapshot.preferences.quiet_enabled),
+		and bool(saved_snapshot.preferences.quiet_enabled)
+		and int(saved_snapshot.preferences.quiet_start_hour) == 21
+		and int(saved_snapshot.preferences.quiet_end_hour) == 7,
 		"enabled schedules and reminder preferences must be in settings"
 	)
 	main._save_settings()
