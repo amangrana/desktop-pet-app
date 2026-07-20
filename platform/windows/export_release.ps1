@@ -1,7 +1,7 @@
 param(
     [string]$GodotPath = ".tools\godot-4.7.1\Godot_v4.7.1-stable_win64_console.exe",
     [string]$CredentialPath = "",
-    [string]$OutputPath = "dist\DesktopPet.exe"
+    [string]$OutputPath = "dist\DesktopPet-Windows\DesktopPet.exe"
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,9 +66,47 @@ if (-not (Test-Path -LiteralPath $GodotPath -PathType Leaf)) {
 if (-not [IO.Path]::IsPathRooted($OutputPath)) {
     $OutputPath = Join-Path $projectRoot $OutputPath
 }
+$helperPaths = @(
+    (
+        Join-Path $projectRoot (
+            "platform\windows\activity_helper\" +
+            "DesktopPetActivityHelper.exe"
+        )
+    ),
+    (
+        Join-Path $projectRoot (
+            "platform\windows\credential_helper\" +
+            "DesktopPetCredentialHelper.exe"
+        )
+    ),
+    (
+        Join-Path $projectRoot (
+            "platform\windows\taskbar_helper\" +
+            "DesktopPetTaskbarHelper.exe"
+        )
+    )
+)
+foreach ($helperPath in $helperPaths) {
+    if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
+        throw "Windows runtime helper was not found: $helperPath"
+    }
+}
 $outputDirectory = Split-Path -Parent $OutputPath
 if (-not (Test-Path -LiteralPath $outputDirectory)) {
     New-Item -ItemType Directory -Path $outputDirectory | Out-Null
+}
+$releaseFilenames = @(
+    (Split-Path -Leaf $OutputPath),
+    "DesktopPetActivityHelper.exe",
+    "DesktopPetCredentialHelper.exe",
+    "DesktopPetTaskbarHelper.exe",
+    "DesktopPet.tmp"
+)
+foreach ($filename in $releaseFilenames) {
+    $existingPath = Join-Path $outputDirectory $filename
+    if (Test-Path -LiteralPath $existingPath -PathType Leaf) {
+        Remove-Item -LiteralPath $existingPath -Force
+    }
 }
 
 $previousClientId = [Environment]::GetEnvironmentVariable(
@@ -100,4 +138,8 @@ try {
     )
 }
 
-Write-Host "Windows release exported to $OutputPath"
+foreach ($helperPath in $helperPaths) {
+    Copy-Item -LiteralPath $helperPath -Destination $outputDirectory -Force
+}
+
+Write-Host "Windows release exported to $outputDirectory"

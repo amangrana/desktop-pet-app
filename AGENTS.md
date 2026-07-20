@@ -33,9 +33,12 @@
 - Windows 系统托盘第一阶段已完成：托盘菜单支持显示/隐藏宠物、开始专注、打开 Pet Notes 和退出；完整活动托盘仍是后续功能。
 - 主宠物窗口当前不得启用 `no_focus`、`unfocusable` 或运行时 `WS_EX_TOOLWINDOW`。实机验证表明这些样式会造成右键卡死、左键失效或透明窗口只剩浅色矩形。
 - 任务栏按钮通过独立 helper 调用 Windows Shell `ITaskbarList::DeleteTab(HWND)` 隐藏；helper 只修改 Shell 的任务栏列表，不得调用 `SetWindowLongPtr`、`ShowWindow` 或修改窗口所有权。此方案不负责隐藏 Alt+Tab。
-- 下一步是用户实机验收 Google Calendar 重启自动登录；正式发行的 OAuth 客户端凭据打包或后端交换方案仍待确定。随后实现统一待处理活动列表。
+- Windows 正式导出会把已校验的 Desktop OAuth 配置注入 PCK，并将主程序、活动监听、凭据管理和任务栏隐藏四个 EXE 生成到 `dist/DesktopPet-Windows`；普通用户不需要 `.tools` 或本地 OAuth JSON。
+- 宠物显示比例支持 75%、100%、125%、150%、200%、250% 和 300%，Godot 右键菜单字体、行距、留白与图标尺寸同步调整；Windows 原生托盘菜单仍由系统 DPI 控制。
+- 下一步是用户在另一台 PC 实机验收发行包 Google Calendar 登录、重启自动恢复、主动断连和 AMD 透明窗口。随后实现统一待处理活动列表。
 - 键鼠活动未来可以作为奖励和掉落的输入信号，但当前阶段只计数；奖励层不得直接依赖原始输入事件或按次数 1:1 发放高价值资源。
 - 正式菜单不显示模拟键鼠入口；模拟批次只保留在自动化测试中。
+- 普通源码改动后不重复导出 EXE；仅在需要最新 EXE 实机验收，或执行 Git push/merge 发布流程时清理并重新导出正式包。
 
 ## 唯一工作目录
 

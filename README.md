@@ -21,7 +21,7 @@
 - 透明、无边框窗口
 - 始终置顶开关
 - 拖动并保存窗口位置
-- 75%–150% 显示比例
+- 75%–300% 显示比例；宠物右键菜单字体、行距和留白同步缩放
 - 宠物区域接收鼠标，其他透明区域穿透
 - 以用户参考照片为原型创作的黑色巴哥犬 Leo 母版，采用与 Bobo 统一的简洁卡通色块和柔和阴影；黑色四肢与银灰眼周在小尺寸下保持清晰
 - 以用户参考照片为原型创作的英国长毛猫 Bobo 母版
@@ -116,7 +116,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 
 ## 复制到另一台 PC
 
-当前原型可以将整个 `DesktopPet` 文件夹复制到另一台 Windows 10/11 64 位 PC，然后双击 `launch.cmd` 运行。必须一并复制 `.tools` 子目录；其中包含便携版 Godot。目标电脑不需要另外安装 Godot。
+正式测试包位于 `dist\DesktopPet-Windows`。将整个目录复制到另一台 Windows 10/11 64 位 PC，保持主程序和三个 helper 在同一目录，然后运行 `DesktopPet.exe`；目标电脑不需要 Godot 或 `.tools`。源码开发方式仍可复制整个项目和 `.tools` 后使用 `launch.cmd`。
 
 注意：
 
@@ -281,7 +281,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\platform\windows\export_release.ps1
 ```
 
-脚本会校验固定 client ID，通过进程环境把 client 配置交给 Godot 导出插件，并生成 `dist\DesktopPet.exe`。原始 JSON 不会进入发行包；插件只加入运行所需的规范化 `client_id` 与 `client_secret`。CI 可改用 `DESKTOP_PET_GOOGLE_CLIENT_ID` 和 `DESKTOP_PET_GOOGLE_CLIENT_SECRET` 两个受保护环境变量，不需要创建 JSON。
+脚本会校验固定 client ID，通过进程环境把 client 配置交给 Godot 导出插件，并清理后重建 `dist\DesktopPet-Windows` 中的 `DesktopPet.exe`、`DesktopPetActivityHelper.exe`、`DesktopPetCredentialHelper.exe` 和 `DesktopPetTaskbarHelper.exe`。四个 EXE 必须一起分发并放在同一目录。测试 PCK 位于独立的 `dist\tests`，不会混入正式包。原始 JSON 不会进入发行包；插件只加入运行所需的规范化 `client_id` 与 `client_secret`。CI 可改用 `DESKTOP_PET_GOOGLE_CLIENT_ID` 和 `DESKTOP_PET_GOOGLE_CLIENT_SECRET` 两个受保护环境变量，不需要创建 JSON。
 
 如果发行配置缺失或 client ID 不匹配，应用会在打开浏览器前显示配置错误。不要把 Desktop client secret 当作用户数据或访问令牌：它随 Installed 应用分发且可被提取；真正能访问个人日历的是每位用户授权后生成并保存于其 Windows 凭据管理器中的 refresh token。
 

@@ -39,6 +39,8 @@ const CHECKBOX_CHECKED_ICON_PATH := "res://assets/ui/checkbox_checked.svg"
 const TRAY_ICON_PATH := "res://assets/ui/tray_icon.svg"
 
 const BASE_WINDOW_SIZE := 360
+const DISPLAY_SCALE_MIN := 0.75
+const DISPLAY_SCALE_MAX := 3.0
 const DEFAULT_PET_ID := &"leo"
 const FOCUS_DURATION_SECONDS := 25 * 60
 const BREAK_DURATION_SECONDS := 5 * 60
@@ -59,7 +61,7 @@ const PET_NOTES_WINDOW_MAX_HEIGHT := 520
 const SETTINGS_WINDOW_SCREEN_MARGIN := 32
 const MENU_FONT_SIZE_MIN := 14
 const MENU_FONT_SIZE_BASE := 16
-const MENU_FONT_SIZE_MAX := 20
+const MENU_FONT_SIZE_MAX := 32
 const QUIET_HOURS_PRESETS := [
 	Vector2i(-1, -1),
 	Vector2i(22, 8),
@@ -88,6 +90,9 @@ const MENU_SCALE_75 := 30
 const MENU_SCALE_100 := 31
 const MENU_SCALE_125 := 32
 const MENU_SCALE_150 := 33
+const MENU_SCALE_200 := 35
+const MENU_SCALE_250 := 36
+const MENU_SCALE_300 := 37
 const MENU_TIMER_STATUS := 40
 const MENU_START_FOCUS := 41
 const MENU_START_BREAK := 42
@@ -183,8 +188,8 @@ var google_calendar_sync_button: Button
 var google_calendar_disconnect_button: Button
 var pet_notes_save_button: Button
 var pet_notes_cancel_button: Button
-var checkbox_unchecked_icon: ImageTexture
-var checkbox_checked_icon: ImageTexture
+var checkbox_unchecked_icon: Texture2D
+var checkbox_checked_icon: Texture2D
 var notification_timer: Timer
 var ambient_card_tick_timer: Timer
 var auto_transition_timer: Timer
@@ -1172,6 +1177,9 @@ func _build_pet_notes_settings_window() -> void:
 	pet_notes_enabled_check = CheckBox.new()
 	pet_notes_enabled_check.focus_mode = Control.FOCUS_NONE
 	_style_settings_checkbox(pet_notes_enabled_check)
+	pet_notes_enabled_check.toggled.connect(
+		_update_pet_notes_dependency_state
+	)
 	pet_notes_master_card.add_child(pet_notes_enabled_check)
 
 	pet_notes_calendar_card = PanelContainer.new()
@@ -1256,6 +1264,9 @@ func _build_pet_notes_settings_window() -> void:
 	pet_notes_save_button.pressed.connect(_save_pet_notes_settings)
 	pet_notes_footer.add_child(pet_notes_save_button)
 	_refresh_pet_notes_settings_texts()
+	_update_pet_notes_dependency_state(
+		pet_notes_enabled_check.button_pressed
+	)
 
 
 func _settings_card_style() -> StyleBoxFlat:
@@ -1281,6 +1292,10 @@ func _style_settings_button(
 	button.add_theme_color_override("font_color", Color.WHITE)
 	button.add_theme_color_override("font_hover_color", Color.WHITE)
 	button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	button.add_theme_color_override(
+		"font_disabled_color",
+		Color("#8E839C")
+	)
 	var normal_color := Color("#4A4055")
 	var hover_color := Color("#5A4D68")
 	var pressed_color := Color("#403649")
@@ -1296,6 +1311,7 @@ func _style_settings_button(
 		["normal", normal_color],
 		["hover", hover_color],
 		["pressed", pressed_color],
+		["disabled", Color("#352F3C")],
 	]:
 		var style := StyleBoxFlat.new()
 		style.bg_color = state_data[1]
@@ -1322,6 +1338,10 @@ func _style_settings_checkbox(check_box: CheckBox) -> void:
 	check_box.add_theme_color_override("font_hover_color", Color.WHITE)
 	check_box.add_theme_color_override("font_pressed_color", Color.WHITE)
 	check_box.add_theme_color_override("font_focus_color", Color.WHITE)
+	check_box.add_theme_color_override(
+		"font_disabled_color",
+		Color("#ADA3B8")
+	)
 	check_box.add_theme_color_override(
 		"font_outline_color",
 		Color("#352B42")
@@ -1353,7 +1373,14 @@ func _style_settings_checkbox(check_box: CheckBox) -> void:
 		)
 
 
-func _load_svg_texture(path: String) -> ImageTexture:
+func _load_svg_texture(path: String) -> Texture2D:
+	var imported_texture := load(path) as Texture2D
+	if imported_texture != null:
+		return imported_texture
+
+	# Keep a source-SVG fallback for unusual editor/import states. Exported
+	# builds normally take the imported Texture2D path above because raw SVG
+	# source text is not guaranteed to be stored in the PCK.
 	var image := Image.new()
 	var load_result := image.load_svg_from_string(
 		FileAccess.get_file_as_string(path)
@@ -1375,6 +1402,21 @@ func _open_pet_notes_settings() -> void:
 	_refresh_pet_notes_settings_texts()
 	pet_notes_settings_window.popup_centered(PET_NOTES_WINDOW_SIZE)
 	_queue_pet_notes_window_resize()
+
+
+func _update_pet_notes_dependency_state(enabled: bool) -> void:
+	if (
+		pet_notes_calendar_card == null
+		or calendar_notes_enabled_check == null
+	):
+		return
+	calendar_notes_enabled_check.disabled = not enabled
+	pet_notes_calendar_card.modulate = (
+		Color.WHITE
+		if enabled
+		else Color(0.68, 0.68, 0.68, 0.72)
+	)
+	_refresh_google_calendar_status()
 
 
 func _save_pet_notes_settings() -> void:
@@ -1453,6 +1495,10 @@ func _refresh_google_calendar_status() -> void:
 	var is_connected: bool = (
 		google_calendar_provider.has_account_connection()
 	)
+	var pet_notes_enabled := (
+		pet_notes_enabled_check != null
+		and pet_notes_enabled_check.button_pressed
+	)
 	if state == GoogleCalendarProviderScript.State.ERROR:
 		google_calendar_status_label.text = _text(
 			"google_calendar_error",
@@ -1506,11 +1552,17 @@ func _refresh_google_calendar_status() -> void:
 			"google_calendar_disconnected"
 		)
 	google_calendar_connect_button.visible = not is_connected
-	google_calendar_connect_button.disabled = is_busy
+	google_calendar_connect_button.disabled = (
+		is_busy or not pet_notes_enabled
+	)
 	google_calendar_sync_button.visible = is_connected
-	google_calendar_sync_button.disabled = is_busy
+	google_calendar_sync_button.disabled = (
+		is_busy or not pet_notes_enabled
+	)
 	google_calendar_disconnect_button.visible = is_connected
-	google_calendar_disconnect_button.disabled = is_busy
+	google_calendar_disconnect_button.disabled = (
+		is_busy or not pet_notes_enabled
+	)
 	_queue_pet_notes_window_resize()
 
 
@@ -1789,6 +1841,9 @@ func _build_context_menu() -> void:
 	window_menu.add_radio_check_item(_text("scale", [100]), MENU_SCALE_100)
 	window_menu.add_radio_check_item(_text("scale", [125]), MENU_SCALE_125)
 	window_menu.add_radio_check_item(_text("scale", [150]), MENU_SCALE_150)
+	window_menu.add_radio_check_item(_text("scale", [200]), MENU_SCALE_200)
+	window_menu.add_radio_check_item(_text("scale", [250]), MENU_SCALE_250)
+	window_menu.add_radio_check_item(_text("scale", [300]), MENU_SCALE_300)
 
 	settings_menu = _create_submenu("SettingsMenu")
 	settings_menu.add_item(
@@ -1924,7 +1979,14 @@ func _menu_font_size_for_scale(scale_factor: float) -> int:
 	return clampi(
 		roundi(
 			MENU_FONT_SIZE_BASE
-			+ (clampf(scale_factor, 0.75, 1.5) - 1.0) * 8.0
+			+ (
+				clampf(
+					scale_factor,
+					DISPLAY_SCALE_MIN,
+					DISPLAY_SCALE_MAX
+				)
+				- 1.0
+			) * 8.0
 		),
 		MENU_FONT_SIZE_MIN,
 		MENU_FONT_SIZE_MAX
@@ -2168,6 +2230,12 @@ func _handle_menu_item(id: int) -> void:
 			_apply_scale(1.25)
 		MENU_SCALE_150:
 			_apply_scale(1.5)
+		MENU_SCALE_200:
+			_apply_scale(2.0)
+		MENU_SCALE_250:
+			_apply_scale(2.5)
+		MENU_SCALE_300:
+			_apply_scale(3.0)
 		MENU_EXIT:
 			_shutdown()
 			return
@@ -2218,7 +2286,11 @@ func _refresh_tray_ui() -> void:
 
 
 func _apply_scale(scale_factor: float, save := true) -> void:
-	settings.display_scale = clampf(scale_factor, 0.75, 1.5)
+	settings.display_scale = clampf(
+		scale_factor,
+		DISPLAY_SCALE_MIN,
+		DISPLAY_SCALE_MAX
+	)
 	var size := roundi(BASE_WINDOW_SIZE * settings.display_scale)
 	var window_size := Vector2i(size, size)
 	var window := get_window()
@@ -2452,6 +2524,21 @@ func _update_menu_checks() -> void:
 		window_menu,
 		MENU_SCALE_150,
 		is_equal_approx(settings.display_scale, 1.5)
+	)
+	_set_menu_checked(
+		window_menu,
+		MENU_SCALE_200,
+		is_equal_approx(settings.display_scale, 2.0)
+	)
+	_set_menu_checked(
+		window_menu,
+		MENU_SCALE_250,
+		is_equal_approx(settings.display_scale, 2.5)
+	)
+	_set_menu_checked(
+		window_menu,
+		MENU_SCALE_300,
+		is_equal_approx(settings.display_scale, 3.0)
 	)
 	_update_timer_menu()
 	_update_reminder_menu()
@@ -3649,6 +3736,9 @@ func _refresh_localized_ui() -> void:
 		[MENU_SCALE_100, 100],
 		[MENU_SCALE_125, 125],
 		[MENU_SCALE_150, 150],
+		[MENU_SCALE_200, 200],
+		[MENU_SCALE_250, 250],
+		[MENU_SCALE_300, 300],
 	]:
 		_set_menu_text(
 			window_menu,
@@ -3731,8 +3821,8 @@ func _load_settings() -> void:
 	settings.always_on_top = config.get_value("window", "always_on_top", true)
 	settings.display_scale = clampf(
 		float(config.get_value("window", "display_scale", 1.0)),
-		0.75,
-		1.5
+		DISPLAY_SCALE_MIN,
+		DISPLAY_SCALE_MAX
 	)
 	settings.selected_pet_id = str(
 		config.get_value("pet", "selected_pet_id", String(DEFAULT_PET_ID))
