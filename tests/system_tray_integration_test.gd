@@ -3,6 +3,7 @@ extends SceneTree
 const MainScene := preload("res://scenes/Main.tscn")
 
 const MENU_TRAY_TOGGLE_PET := 8
+const MENU_ACTIVITY_CENTER := 9
 const MENU_START_FOCUS := 41
 const MENU_AMBIENT_CARDS := 59
 const MENU_EXIT := 90
@@ -28,6 +29,7 @@ func _run() -> void:
 	_expect(
 		main.tray_menu != null
 		and main.tray_menu.get_item_index(MENU_TRAY_TOGGLE_PET) >= 0
+		and main.tray_menu.get_item_index(MENU_ACTIVITY_CENTER) >= 0
 		and main.tray_menu.get_item_index(MENU_START_FOCUS) >= 0
 		and main.tray_menu.get_item_index(MENU_AMBIENT_CARDS) >= 0
 		and main.tray_menu.get_item_index(MENU_EXIT) >= 0,

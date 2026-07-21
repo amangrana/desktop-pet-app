@@ -17,6 +17,17 @@ func _run() -> void:
 	main._apply_scale(2.0, false)
 	await _expect_scaled_window(
 		main,
+		main.activity_center_window,
+		Vector2i(500, 700),
+		main._open_activity_center,
+		"Activity Center"
+	)
+	_expect(
+		not main.activity_center_window.exclusive,
+		"Activity Center must not block pet interaction"
+	)
+	await _expect_scaled_window(
+		main,
 		main.duration_settings_window,
 		Vector2i(430, 390),
 		main._open_duration_settings,

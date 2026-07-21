@@ -182,6 +182,35 @@ func _run() -> void:
 		"disabling water must not disable stand"
 	)
 
+	var targeted = _new_manager()
+	targeted.start_test_reminder(TimerManagerScript.Kind.WATER, 1.0)
+	targeted.start_test_reminder(TimerManagerScript.Kind.STAND, 1.0)
+	_fake_now += 1.1
+	targeted._timer_for(TimerManagerScript.Kind.WATER)._process(0.0)
+	targeted._timer_for(TimerManagerScript.Kind.STAND)._process(0.0)
+	_expect(
+		targeted.complete_due_kind(TimerManagerScript.Kind.STAND)
+		== TimerManagerScript.Kind.STAND
+		and not targeted.is_due(TimerManagerScript.Kind.STAND)
+		and targeted.is_due(TimerManagerScript.Kind.WATER),
+		"targeted completion must not consume another due reminder"
+	)
+	_expect(
+		targeted.snooze_due_kind(TimerManagerScript.Kind.WATER)
+		== TimerManagerScript.Kind.WATER
+		and not targeted.is_due(TimerManagerScript.Kind.WATER),
+		"targeted snooze must reschedule only the selected reminder"
+	)
+	targeted.start_test_reminder(TimerManagerScript.Kind.STAND, 1.0)
+	_fake_now += 1.1
+	targeted._timer_for(TimerManagerScript.Kind.STAND)._process(0.0)
+	_expect(
+		targeted.disable_due_kind(TimerManagerScript.Kind.STAND)
+		== TimerManagerScript.Kind.STAND
+		and not targeted.is_enabled(TimerManagerScript.Kind.STAND),
+		"targeted stop must disable only the selected reminder type"
+	)
+
 	if _failed:
 		quit(1)
 		return
