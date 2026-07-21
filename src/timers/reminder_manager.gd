@@ -206,12 +206,21 @@ func current_due_kind() -> int:
 
 
 func complete_due() -> int:
-	return _reschedule_current_due(interval_seconds(current_due_kind()))
+	return complete_due_kind(current_due_kind())
+
+
+func complete_due_kind(kind: int) -> int:
+	return _reschedule_due_kind(kind, interval_seconds(kind))
 
 
 func disable_due() -> int:
-	var kind := current_due_kind()
+	return disable_due_kind(current_due_kind())
+
+
+func disable_due_kind(kind: int) -> int:
 	if kind == TimerManagerScript.Kind.NONE:
+		return TimerManagerScript.Kind.NONE
+	if not is_due(kind):
 		return TimerManagerScript.Kind.NONE
 	if not set_enabled(kind, false):
 		return TimerManagerScript.Kind.NONE
@@ -219,12 +228,16 @@ func disable_due() -> int:
 
 
 func snooze_due(duration_seconds := -1) -> int:
+	return snooze_due_kind(current_due_kind(), duration_seconds)
+
+
+func snooze_due_kind(kind: int, duration_seconds := -1) -> int:
 	var duration := (
 		_snooze_seconds
 		if duration_seconds <= 0
 		else duration_seconds
 	)
-	return _reschedule_current_due(duration)
+	return _reschedule_due_kind(kind, duration)
 
 
 func pause_kind_until(kind: int, resume_unix: float) -> int:
@@ -355,9 +368,12 @@ func restore(snapshot_data: Dictionary) -> bool:
 	return restored_any
 
 
-func _reschedule_current_due(duration_seconds: float) -> int:
-	var kind := current_due_kind()
-	if kind == TimerManagerScript.Kind.NONE or duration_seconds <= 0.0:
+func _reschedule_due_kind(kind: int, duration_seconds: float) -> int:
+	if (
+		not _is_reminder_kind(kind)
+		or not is_due(kind)
+		or duration_seconds <= 0.0
+	):
 		return TimerManagerScript.Kind.NONE
 	_paused_until[kind] = 0.0
 	_timer_for(kind).start_timer(kind, duration_seconds)

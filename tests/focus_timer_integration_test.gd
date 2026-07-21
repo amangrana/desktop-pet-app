@@ -7,6 +7,7 @@ const DEV_BREAK_MENU_ID := 46
 const CANCEL_AUTO_TRANSITION_MENU_ID := 47
 const TIMER_STATUS_MENU_ID := 40
 const FOCUS_SUBMENU_MENU_ID := 1
+const ACTIVITY_CENTER_MENU_ID := 9
 const START_FOCUS_MENU_ID := 41
 
 var _failed := false
@@ -22,8 +23,12 @@ func _run() -> void:
 	await process_frame
 
 	_expect(
-		main.context_menu.get_item_count() <= 10,
+		main.context_menu.get_item_count() <= 12,
 		"top-level context menu must stay compact"
+	)
+	_expect(
+		main.context_menu.get_item_index(ACTIVITY_CENTER_MENU_ID) >= 0,
+		"top-level context menu must expose Activity Center"
 	)
 	_expect(
 		main.context_menu.get_item_index(FOCUS_SUBMENU_MENU_ID) >= 0,

@@ -84,6 +84,42 @@ func _run() -> void:
 	_expect(
 		AppLocalizationScript.text(
 			AppLocalizationScript.ENGLISH,
+			"activity_center_menu"
+		) == "Activity Center…"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"activity_center_menu"
+		) == "活动中心…"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"activity_center_status_due_queued"
+		) == "待处理 — 将在勿扰结束后显示",
+		"Activity Center must provide complete English and Chinese text"
+	)
+	_expect(
+		AppLocalizationScript.text(
+			AppLocalizationScript.ENGLISH,
+			"activity_center_pending_many",
+			[2]
+		) == "2 reminders need attention"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"activity_center_pending_many",
+			[2]
+		) == "有 2 项提醒待处理"
+		and AppLocalizationScript.text(
+			AppLocalizationScript.CHINESE,
+			"activity_event_reminder_snoozed",
+			["喝水"]
+		) == "喝水提醒已延后",
+		(
+			"Activity Center pending and recent activity text must "
+			+ "format in both languages"
+		)
+	)
+	_expect(
+		AppLocalizationScript.text(
+			AppLocalizationScript.ENGLISH,
 			"quiet_settings_menu"
 		) == "Quiet hours…"
 		and AppLocalizationScript.text(

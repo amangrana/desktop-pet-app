@@ -53,6 +53,8 @@
 - 每日勿扰时段可在独立设置窗口中启用或关闭，并分别选择开始与结束小时
 - 专注期间暂存已到期的健康提醒，在休息开始后再用宠物动作和气泡提示
 - 健康提醒气泡可直接点击完成、延后或关闭此类提醒；气泡收起后点击宠物可重新打开
+- “活动中心 / Activity Center”可从宠物右键菜单或 Windows 托盘打开，以状态卡片集中显示专注、喝水、站立和勿扰时段，并处理常用操作
+- 活动中心显示待处理提醒数量和本次运行最近 5 条 Focus/Break 与健康提醒事件；最近活动可手动清除，退出程序后自动清空
 - 可选的“宠物小纸条 / Pet Notes”会在非专注、非勿扰且没有待处理提醒时显示在宠物图片上；`OK` 按钮显示关闭倒计时，也可手动关闭
 - 菜单、宠物气泡和系统对话框支持 English / 简体中文，并保存语言选择
 
@@ -151,6 +153,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 - `Developer` 子菜单中的专注和休息 `1 sec (test)`：快速验证两种完成提醒；正式导出时整个子菜单隐藏
 - `Window` 子菜单中的 `Always on top`：切换始终置顶
 - `Window` 子菜单中的 `Scale`：切换宠物显示比例
+- `Activity Center…`：打开非独占状态窗口；可开始、暂停、继续或取消 Focus/Break，并对指定的到期提醒执行 Done、Snooze 或 Turn off
+- Water/Stand 关闭时，活动中心卡片显示 `Turn on`；运行中显示 `Turn off`；到期后切换为 `Done / Snooze / Turn off`，无需返回右键 Reminders 子菜单
+- Water/Stand 的单一开关按钮与名称、状态位于同一行；到期后的三枚处理按钮才使用下一行。Quiet Hours 的 `Edit…` 也位于对应卡片右侧
+- 活动中心底部的 `Set durations` 与 `Quiet hours…` 复用现有设置窗口，不维护第二套设置数据
+- 有提醒待处理时，宠物右键与托盘入口显示数量；活动中心按时间倒序显示最近 5 条会话事件，并可用 `Clear` 单独清空
 - `Reminders` 子菜单：独立开启或关闭喝水与站立提醒，并实时查看下一次提醒倒计时
 - `Settings` → `Set durations`：打开独立窗口，一次设置 Focus、Break、Water、Stand 和 Snooze 的默认分钟数
 - 保存的新时长从下一轮开始生效；已经运行中的专注、休息或健康提醒保留原截止时间
@@ -171,6 +178,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 - refresh token 安全保存在当前 Windows 用户的凭据管理器中，重启后自动恢复登录；access token 仍只保存在进程内存。主动断开时会先持久禁止自动恢复，再删除已保存登录，因此立即退出也不会在下次启动重新连接
 - `Developer` → `Pet Note — 10 sec (test)`：验证图片内小纸条、按钮倒计时和自动关闭
 - 程序在 Windows 通知区域显示托盘图标；托盘菜单可显示/隐藏宠物、开始专注、打开 Pet Notes 或退出
+- 托盘菜单也可直接打开 Activity Center；仅打开、刷新或关闭窗口不会改变计时与提醒，只有明确点击操作按钮才会修改对应状态
+- 活动中心最近事件只使用白名单结构：事件类型、Focus/Break/Water/Stand 分类及小时分钟；不接受或保存具体按键、鼠标坐标、应用名称和任意文本
 - 程序提供 Windows 通知区域托盘入口；主宠物窗口通过 `ITaskbarList::DeleteTab` 隐藏任务栏按钮，不修改 Godot 窗口样式
 - 宠物右键菜单保持无焦点窗口的稳定打开路径，并继续实时刷新计时状态；不得在菜单开关时切换透明主窗口焦点样式
 - Windows 默认通过 ANGLE（Direct3D 11）运行 Compatibility renderer，避免部分 AMD 原生 OpenGL 驱动把透明窗口区域合成为黑色；ANGLE 不可用时回退到原生 OpenGL
@@ -241,6 +250,10 @@ tests/focus_timer_integration_test.gd
 tests/reminder_manager_test.gd    健康提醒周期、延后、暂停与恢复自测
 tests/health_reminder_integration_test.gd
                                   健康提醒菜单、可点击气泡、语言与专注暂存集成自测
+tests/activity_center_integration_test.gd
+                                  活动中心状态、精确操作、入口、缩放与本地化集成自测
+tests/activity_center_session_log_test.gd
+                                  会话事件白名单、5 条上限、深拷贝与清除自测
 tests/localization_test.gd         本地化目录完整性、语言回退与格式化自测
 tests/check_in_manager_test.gd     小纸条队列、过期与日历触发规则自测
 tests/ambient_card_integration_test.gd
@@ -297,6 +310,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 - 宠物小纸条已完成 Google Calendar OAuth、只读同步和 Windows Credential Manager 持久登录；编辑器使用被 Git 忽略的本地 JSON，正式 Windows 发行包在导出阶段注入 Desktop client 配置。公开发布前仍需完成 Google OAuth 应用验证，并在独立电脑上验收导出包登录。
 - 当前只提供 English 和简体中文；宠物名称仍使用宠物包中定义的专名。
 - 鼠标穿透区域由待机 PNG 的 alpha 自动生成简化多边形，并保留动作与点击爱心所需的小范围安全边距；它不是逐像素命中。
-- 系统托盘第一阶段已完成；完整的计时与待处理提醒“活动托盘”仍未实现。
+- 活动中心已支持 Focus 操作、Reminder 开关与到期处理、待处理数量和会话级最近事件；不提供跨重启历史或趋势图，也不在卡片内编辑时长或勿扰时间。
 - 独占全屏应用可能覆盖置顶窗口。
 - 每个新宠物包仍需配置能覆盖动作和特效的回退点击轮廓；正常运行优先使用自动 alpha 轮廓。

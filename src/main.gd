@@ -32,6 +32,15 @@ const GoogleCalendarProviderScript := preload(
 const GoogleOAuthClientConfigScript := preload(
 	"res://src/checkins/google_oauth_client_config.gd"
 )
+const ActivityCenterViewScript := preload(
+	"res://src/ui/activity_center_view.gd"
+)
+const ActivityCenterViewStateScript := preload(
+	"res://src/ui/activity_center_view_state.gd"
+)
+const ActivityCenterSessionLogScript := preload(
+	"res://src/Activity/activity_center_session_log.gd"
+)
 const CHECKBOX_UNCHECKED_ICON_PATH := (
 	"res://assets/ui/checkbox_unchecked.svg"
 )
@@ -54,6 +63,7 @@ const GOOGLE_CALENDAR_CLIENT_ID := (
 	GoogleOAuthClientConfigScript.DEFAULT_CLIENT_ID
 )
 const GOOGLE_CALENDAR_CREDENTIAL_PREFIX := "client_secret"
+const ACTIVITY_CENTER_WINDOW_SIZE := Vector2i(500, 700)
 const DURATION_SETTINGS_WINDOW_SIZE := Vector2i(430, 390)
 const DURATION_SETTINGS_WINDOW_MAX_HEIGHT := 600
 const QUIET_SETTINGS_WINDOW_SIZE := Vector2i(410, 330)
@@ -82,6 +92,7 @@ const MENU_PETS_SUBMENU := 5
 const MENU_WINDOW_SUBMENU := 6
 const MENU_DEVELOPER_SUBMENU := 7
 const MENU_TRAY_TOGGLE_PET := 8
+const MENU_ACTIVITY_CENTER := 9
 const MENU_ALWAYS_ON_TOP := 10
 const MENU_ACTIVITY_SENSING := 15
 const MENU_ACTIVITY_COUNTS := 16
@@ -145,6 +156,8 @@ var notification_actions: HBoxContainer
 var notification_done_button: Button
 var notification_snooze_button: Button
 var notification_stop_button: Button
+var activity_center_window: Window
+var activity_center_view
 var duration_settings_window: Window
 var duration_settings_content: VBoxContainer
 var duration_settings_scroll: ScrollContainer
@@ -206,6 +219,7 @@ var auto_transition_timer: Timer
 var check_in_poll_timer: Timer
 var activity_monitor
 var activity_stats
+var activity_center_log
 var activity_adapter
 var windows_taskbar_adapter
 var timer_manager
@@ -281,6 +295,7 @@ func _ready() -> void:
 	_select_initial_pet()
 	_configure_window()
 	_build_hud()
+	_build_activity_center_window()
 	_build_duration_settings_window()
 	_build_quiet_settings_window()
 	_build_language_settings_window()
@@ -297,6 +312,9 @@ func _ready() -> void:
 
 
 func _build_activity_pipeline() -> void:
+	activity_center_log = ActivityCenterSessionLogScript.new()
+	activity_center_log.changed.connect(_refresh_activity_center_state)
+
 	activity_stats = ActivityStatsScript.new()
 	activity_stats.changed.connect(_update_activity_menu)
 
@@ -679,6 +697,457 @@ func _create_notification_button() -> Button:
 	button.custom_minimum_size = Vector2(62, 28)
 	button.add_theme_font_size_override("font_size", 12)
 	return button
+
+
+func _build_activity_center_window() -> void:
+	activity_center_window = Window.new()
+	activity_center_window.name = "ActivityCenterWindow"
+	activity_center_window.size = ACTIVITY_CENTER_WINDOW_SIZE
+	activity_center_window.min_size = ACTIVITY_CENTER_WINDOW_SIZE
+	activity_center_window.unresizable = true
+	activity_center_window.transient = true
+	activity_center_window.exclusive = false
+	activity_center_window.visible = false
+	activity_center_window.close_requested.connect(
+		_close_activity_center
+	)
+	add_child(activity_center_window)
+
+	var background := ColorRect.new()
+	background.color = Color("#2B2434")
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	activity_center_window.add_child(background)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_top", 16)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	activity_center_window.add_child(margin)
+
+	activity_center_view = ActivityCenterViewScript.new()
+	activity_center_view.build()
+	activity_center_view.close_pressed.connect(
+		_close_activity_center
+	)
+	activity_center_view.focus_action_pressed.connect(
+		_handle_activity_center_focus_action
+	)
+	activity_center_view.reminder_action_pressed.connect(
+		_handle_activity_center_reminder_action
+	)
+	activity_center_view.durations_pressed.connect(
+		_open_duration_settings
+	)
+	activity_center_view.quiet_settings_pressed.connect(
+		_open_quiet_settings
+	)
+	activity_center_view.clear_recent_pressed.connect(
+		_clear_activity_center_recent
+	)
+	margin.add_child(activity_center_view)
+	_refresh_activity_center_texts()
+	_refresh_activity_center_state()
+
+
+func _open_activity_center() -> void:
+	_set_pet_window_visible(true)
+	if notification_action_kind != TimerManagerScript.Kind.NONE:
+		_hide_notification()
+	_refresh_activity_center_texts()
+	_refresh_activity_center_state()
+	_popup_activity_center_window()
+
+
+func _close_activity_center() -> void:
+	activity_center_window.hide()
+	_show_pending_health_reminder.call_deferred()
+
+
+func _popup_activity_center_window() -> void:
+	var scale := _settings_window_scale(
+		activity_center_window,
+		ACTIVITY_CENTER_WINDOW_SIZE
+	)
+	var target_size := Vector2i(
+		roundi(ACTIVITY_CENTER_WINDOW_SIZE.x * scale),
+		roundi(ACTIVITY_CENTER_WINDOW_SIZE.y * scale)
+	)
+	activity_center_window.min_size = Vector2i.ZERO
+	activity_center_window.content_scale_mode = (
+		Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	)
+	activity_center_window.content_scale_size = ACTIVITY_CENTER_WINDOW_SIZE
+	activity_center_window.size = target_size
+	activity_center_window.min_size = target_size
+
+	var screen := _settings_window_screen(activity_center_window)
+	var usable_rect := DisplayServer.screen_get_usable_rect(screen)
+	var root_window := get_window()
+	var gap := roundi(12.0 * scale)
+	var target_position := Vector2i(
+		root_window.position.x + root_window.size.x + gap,
+		root_window.position.y
+	)
+	if target_position.x + target_size.x > usable_rect.end.x:
+		target_position.x = root_window.position.x - target_size.x - gap
+	target_position.x = clampi(
+		target_position.x,
+		usable_rect.position.x,
+		maxi(usable_rect.position.x, usable_rect.end.x - target_size.x)
+	)
+	target_position.y = clampi(
+		target_position.y,
+		usable_rect.position.y,
+		maxi(usable_rect.position.y, usable_rect.end.y - target_size.y)
+	)
+	activity_center_window.popup(
+		Rect2i(target_position, target_size)
+	)
+
+
+func _refresh_activity_center_texts() -> void:
+	if activity_center_window == null or activity_center_view == null:
+		return
+	activity_center_window.title = _text("activity_center_window_title")
+	activity_center_view.apply_texts({
+		"heading": _text("activity_center_heading"),
+		"note": _text("activity_center_note"),
+		"focus": _text("activity_center_focus"),
+		"water": _text("water"),
+		"stand": _text("stand"),
+		"quiet": _text("activity_center_quiet"),
+		"turn_on": _text("activity_center_turn_on"),
+		"recent_title": _text("activity_center_recent_title"),
+		"recent_clear": _text("activity_center_recent_clear"),
+		"recent_empty": _text("activity_center_recent_empty"),
+		"done": _text("bubble_done"),
+		"snooze": _text("bubble_snooze", [
+			_format_setting_duration(reminder_manager.snooze_seconds())
+		]),
+		"turn_off": _text("bubble_turn_off"),
+		"durations": _text("duration_settings_menu"),
+		"quiet_settings": _text("activity_center_edit"),
+		"close": _text("activity_center_close"),
+	})
+
+
+func _refresh_activity_center_state() -> void:
+	if activity_center_view == null:
+		return
+	activity_center_view.apply_state(_activity_center_view_state())
+
+
+func _activity_center_view_state():
+	var state := ActivityCenterViewStateScript.new()
+	state.focus_text = _timer_status_summary()
+	if timer_manager == null or timer_manager.state == TimerManagerScript.State.IDLE:
+		state.focus_tone = ActivityCenterViewStateScript.Tone.MUTED
+		state.focus_primary_text = _focus_start_menu_text()
+		state.focus_primary_visible = true
+		state.focus_secondary_text = _break_start_menu_text()
+		state.focus_secondary_visible = true
+	elif timer_manager.state == TimerManagerScript.State.RUNNING:
+		state.focus_tone = ActivityCenterViewStateScript.Tone.ACTIVE
+		state.focus_primary_text = _text("pause_timer")
+		state.focus_primary_visible = true
+		state.focus_secondary_text = _text("cancel_timer")
+		state.focus_secondary_visible = true
+	elif timer_manager.state == TimerManagerScript.State.WAITING_NEXT:
+		state.focus_tone = ActivityCenterViewStateScript.Tone.ATTENTION
+		state.focus_primary_text = _focus_start_menu_text()
+		state.focus_primary_visible = true
+		state.focus_secondary_text = _break_start_menu_text()
+		state.focus_secondary_visible = true
+	else:
+		state.focus_tone = ActivityCenterViewStateScript.Tone.NORMAL
+		state.focus_primary_text = _text("resume_timer")
+		state.focus_primary_visible = true
+		state.focus_secondary_text = _text("cancel_timer")
+		state.focus_secondary_visible = true
+
+	state.water_text = _activity_center_reminder_text(
+		TimerManagerScript.Kind.WATER
+	)
+	state.water_tone = _activity_center_reminder_tone(
+		TimerManagerScript.Kind.WATER
+	)
+	state.water_action_mode = _activity_center_reminder_action_mode(
+		TimerManagerScript.Kind.WATER
+	)
+	state.stand_text = _activity_center_reminder_text(
+		TimerManagerScript.Kind.STAND
+	)
+	state.stand_tone = _activity_center_reminder_tone(
+		TimerManagerScript.Kind.STAND
+	)
+	state.stand_action_mode = _activity_center_reminder_action_mode(
+		TimerManagerScript.Kind.STAND
+	)
+	var pending_count := _activity_center_pending_count()
+	if pending_count <= 0:
+		state.pending_text = _text("activity_center_pending_none")
+		state.pending_tone = ActivityCenterViewStateScript.Tone.MUTED
+	elif pending_count == 1:
+		state.pending_text = _text("activity_center_pending_one")
+		state.pending_tone = ActivityCenterViewStateScript.Tone.ATTENTION
+	else:
+		state.pending_text = _text(
+			"activity_center_pending_many",
+			[pending_count]
+		)
+		state.pending_tone = ActivityCenterViewStateScript.Tone.ATTENTION
+	state.recent_rows = _activity_center_recent_rows()
+
+	if reminder_manager == null or not reminder_manager.quiet_hours_enabled():
+		state.quiet_text = _text("activity_center_status_off")
+		state.quiet_tone = ActivityCenterViewStateScript.Tone.MUTED
+	elif reminder_manager.is_quiet_now():
+		state.quiet_text = _text("activity_center_quiet_active", [
+			reminder_manager.quiet_start_hour(),
+			reminder_manager.quiet_end_hour(),
+		])
+		state.quiet_tone = ActivityCenterViewStateScript.Tone.ACTIVE
+	else:
+		state.quiet_text = _text("activity_center_quiet_inactive", [
+			reminder_manager.quiet_start_hour(),
+			reminder_manager.quiet_end_hour(),
+		])
+		state.quiet_tone = ActivityCenterViewStateScript.Tone.NORMAL
+	return state
+
+
+func _activity_center_pending_count() -> int:
+	if reminder_manager == null:
+		return 0
+	var count := 0
+	for kind in [
+		TimerManagerScript.Kind.WATER,
+		TimerManagerScript.Kind.STAND,
+	]:
+		if reminder_manager.is_due(kind):
+			count += 1
+	return count
+
+
+func _activity_center_menu_text() -> String:
+	var pending_count := _activity_center_pending_count()
+	if pending_count > 0:
+		return _text(
+			"activity_center_menu_pending",
+			[pending_count]
+		)
+	return _text("activity_center_menu")
+
+
+func _refresh_activity_center_menu_text() -> void:
+	if context_menu != null:
+		_set_menu_text(
+			context_menu,
+			MENU_ACTIVITY_CENTER,
+			_activity_center_menu_text()
+		)
+	if tray_menu != null:
+		_set_menu_text(
+			tray_menu,
+			MENU_ACTIVITY_CENTER,
+			_activity_center_menu_text()
+		)
+
+
+func _activity_center_recent_rows() -> Array[String]:
+	var rows: Array[String] = []
+	if activity_center_log == null:
+		return rows
+	for event in activity_center_log.entries():
+		rows.append(_text("activity_center_recent_row", [
+			int(event.get("hour", 0)),
+			int(event.get("minute", 0)),
+			_activity_center_event_text(event),
+		]))
+	return rows
+
+
+func _activity_center_event_text(event: Dictionary) -> String:
+	var code := StringName(event.get("code", &""))
+	var subject := StringName(event.get("subject", &""))
+	var subject_name := _activity_center_subject_name(subject)
+	match code:
+		ActivityCenterSessionLogScript.FOCUS_STARTED:
+			return _text("activity_event_focus_started")
+		ActivityCenterSessionLogScript.BREAK_STARTED:
+			return _text("activity_event_break_started")
+		ActivityCenterSessionLogScript.TIMER_PAUSED:
+			return _text("activity_event_timer_paused", [subject_name])
+		ActivityCenterSessionLogScript.TIMER_RESUMED:
+			return _text("activity_event_timer_resumed", [subject_name])
+		ActivityCenterSessionLogScript.TIMER_CANCELLED:
+			return _text("activity_event_timer_cancelled", [subject_name])
+		ActivityCenterSessionLogScript.FOCUS_COMPLETED:
+			return _text("activity_event_focus_completed")
+		ActivityCenterSessionLogScript.BREAK_COMPLETED:
+			return _text("activity_event_break_completed")
+		ActivityCenterSessionLogScript.REMINDER_DUE:
+			return _text("activity_event_reminder_due", [subject_name])
+		ActivityCenterSessionLogScript.REMINDER_TURNED_ON:
+			return _text(
+				"activity_event_reminder_turned_on",
+				[subject_name]
+			)
+		ActivityCenterSessionLogScript.REMINDER_DONE:
+			return _text("activity_event_reminder_done", [subject_name])
+		ActivityCenterSessionLogScript.REMINDER_SNOOZED:
+			return _text(
+				"activity_event_reminder_snoozed",
+				[subject_name]
+			)
+		ActivityCenterSessionLogScript.REMINDER_TURNED_OFF:
+			return _text(
+				"activity_event_reminder_turned_off",
+				[subject_name]
+			)
+	return ""
+
+
+func _activity_center_subject_name(subject: StringName) -> String:
+	match subject:
+		&"focus":
+			return _text("focus")
+		&"break":
+			return _text("break")
+		&"water":
+			return _text("water")
+		&"stand":
+			return _text("stand")
+	return ""
+
+
+func _activity_center_subject_for_kind(kind: int) -> StringName:
+	match kind:
+		TimerManagerScript.Kind.FOCUS:
+			return &"focus"
+		TimerManagerScript.Kind.BREAK:
+			return &"break"
+		TimerManagerScript.Kind.WATER:
+			return &"water"
+		TimerManagerScript.Kind.STAND:
+			return &"stand"
+	return &""
+
+
+func _record_activity_center_event(
+	code: StringName,
+	subject: StringName
+) -> void:
+	if activity_center_log == null:
+		return
+	activity_center_log.add_event(code, subject)
+
+
+func _clear_activity_center_recent() -> void:
+	if activity_center_log != null:
+		activity_center_log.clear()
+
+
+func _handle_activity_center_focus_action(action: String) -> void:
+	if timer_manager == null:
+		return
+	if (
+		timer_manager.state == TimerManagerScript.State.IDLE
+		or timer_manager.state == TimerManagerScript.State.WAITING_NEXT
+	):
+		var kind := (
+			TimerManagerScript.Kind.FOCUS
+			if action == "primary"
+			else TimerManagerScript.Kind.BREAK
+		)
+		var duration := (
+			_focus_duration_seconds()
+			if kind == TimerManagerScript.Kind.FOCUS
+			else _break_duration_seconds()
+		)
+		_start_timer(kind, duration)
+	elif action == "primary":
+		_pause_or_resume_timer()
+	elif action == "secondary":
+		_cancel_current_timer()
+	_refresh_activity_center_state()
+
+
+func _handle_activity_center_reminder_action(
+	reminder: String,
+	action: String
+) -> void:
+	var kind := (
+		TimerManagerScript.Kind.WATER
+		if reminder == "water"
+		else TimerManagerScript.Kind.STAND
+	)
+	var handled := TimerManagerScript.Kind.NONE
+	match action:
+		"turn_on":
+			if reminder_manager.set_enabled(kind, true):
+				handled = kind
+		"done":
+			handled = reminder_manager.complete_due_kind(kind)
+		"snooze":
+			handled = reminder_manager.snooze_due_kind(kind)
+		"turn_off":
+			if reminder_manager.is_due(kind):
+				handled = reminder_manager.disable_due_kind(kind)
+			elif reminder_manager.set_enabled(kind, false):
+				handled = kind
+	if handled == TimerManagerScript.Kind.NONE:
+		return
+	var event_code := ActivityCenterSessionLogScript.REMINDER_DONE
+	if action == "turn_on":
+		event_code = ActivityCenterSessionLogScript.REMINDER_TURNED_ON
+	elif action == "snooze":
+		event_code = ActivityCenterSessionLogScript.REMINDER_SNOOZED
+	elif action == "turn_off":
+		event_code = ActivityCenterSessionLogScript.REMINDER_TURNED_OFF
+	_record_activity_center_event(
+		event_code,
+		_activity_center_subject_for_kind(kind)
+	)
+	if notification_action_kind == kind:
+		_hide_notification()
+	_refresh_activity_center_state()
+
+
+func _activity_center_reminder_text(kind: int) -> String:
+	if reminder_manager == null or not reminder_manager.is_enabled(kind):
+		return _text("activity_center_status_off")
+	if reminder_manager.is_due(kind):
+		if reminder_manager.is_quiet_now():
+			return _text("activity_center_status_due_queued")
+		return _text("activity_center_status_due")
+	if reminder_manager.is_paused_today(kind):
+		return _text("activity_center_status_paused")
+	return _text("activity_center_status_next", [
+		_format_duration(reminder_manager.remaining_seconds(kind))
+	])
+
+
+func _activity_center_reminder_action_mode(kind: int) -> int:
+	if reminder_manager == null:
+		return ActivityCenterViewStateScript.ReminderActionMode.NONE
+	if not reminder_manager.is_enabled(kind):
+		return ActivityCenterViewStateScript.ReminderActionMode.TURN_ON
+	if reminder_manager.is_due(kind):
+		return ActivityCenterViewStateScript.ReminderActionMode.DUE
+	return ActivityCenterViewStateScript.ReminderActionMode.TURN_OFF
+
+
+func _activity_center_reminder_tone(kind: int) -> int:
+	if reminder_manager == null or not reminder_manager.is_enabled(kind):
+		return ActivityCenterViewStateScript.Tone.MUTED
+	if reminder_manager.is_due(kind):
+		return ActivityCenterViewStateScript.Tone.ATTENTION
+	if reminder_manager.is_paused_today(kind):
+		return ActivityCenterViewStateScript.Tone.NORMAL
+	return ActivityCenterViewStateScript.Tone.ACTIVE
 
 
 func _style_notification_stop_button(button: Button) -> void:
@@ -2137,6 +2606,11 @@ func _build_context_menu() -> void:
 	get_viewport().gui_embed_subwindows = false
 	context_menu = _create_popup_menu("ContextMenu")
 	add_child(context_menu)
+	context_menu.add_item(
+		_activity_center_menu_text(),
+		MENU_ACTIVITY_CENTER
+	)
+	context_menu.add_separator()
 
 	focus_menu = _create_submenu("FocusMenu")
 	focus_menu.add_item(_timer_status_summary(), MENU_TIMER_STATUS)
@@ -2316,6 +2790,10 @@ func _build_system_tray() -> void:
 	tray_menu.force_native = true
 	tray_menu.add_item(_text("tray_hide_pet"), MENU_TRAY_TOGGLE_PET)
 	tray_menu.add_separator()
+	tray_menu.add_item(
+		_activity_center_menu_text(),
+		MENU_ACTIVITY_CENTER
+	)
 	tray_menu.add_item(_focus_start_menu_text(), MENU_START_FOCUS)
 	tray_menu.add_item(_text("ambient_cards"), MENU_AMBIENT_CARDS)
 	tray_menu.add_separator()
@@ -2524,6 +3002,9 @@ func _handle_menu_item(id: int) -> void:
 		MENU_TRAY_TOGGLE_PET:
 			_set_pet_window_visible(not pet_window_visible)
 			return
+		MENU_ACTIVITY_CENTER:
+			_open_activity_center()
+			return
 		MENU_LANGUAGE_SETTINGS:
 			_open_language_settings()
 			return
@@ -2592,14 +3073,9 @@ func _handle_menu_item(id: int) -> void:
 				CheckInManagerScript.DEFAULT_DISPLAY_SECONDS
 			)
 		MENU_PAUSE_RESUME_TIMER:
-			if timer_manager.state == TimerManagerScript.State.RUNNING:
-				timer_manager.pause()
-			elif timer_manager.state == TimerManagerScript.State.PAUSED:
-				timer_manager.resume()
+			_pause_or_resume_timer()
 		MENU_CANCEL_TIMER:
-			_cancel_auto_transition(false)
-			timer_manager.cancel()
-			_hide_notification()
+			_cancel_current_timer()
 		MENU_CANCEL_AUTO_TRANSITION:
 			_cancel_auto_transition(true)
 		MENU_SCALE_75:
@@ -2654,6 +3130,11 @@ func _refresh_tray_ui() -> void:
 		)
 		_set_menu_text(
 			tray_menu,
+			MENU_ACTIVITY_CENTER,
+			_activity_center_menu_text()
+		)
+		_set_menu_text(
+			tray_menu,
 			MENU_AMBIENT_CARDS,
 			_text("ambient_cards")
 		)
@@ -2703,6 +3184,8 @@ func _apply_scale(scale_factor: float, save := true) -> void:
 		)
 
 	_apply_menu_scale()
+	if activity_center_window != null and activity_center_window.visible:
+		_popup_activity_center_window()
 	_update_mouse_passthrough(window_size)
 	window.position = _clamp_to_visible_screen(window.position, window_size)
 	_update_menu_checks()
@@ -3043,6 +3526,8 @@ func _update_reminder_menu() -> void:
 		MENU_STOP_REMINDER,
 	]:
 		_set_menu_disabled(reminder_menu, menu_id, not has_due)
+	_refresh_activity_center_menu_text()
+	_refresh_activity_center_state()
 
 
 func _reminder_menu_title() -> String:
@@ -3263,6 +3748,7 @@ func _update_timer_menu() -> void:
 			MENU_PAUSE_RESUME_TIMER,
 			_text("pause_timer")
 		)
+	_refresh_activity_center_state()
 
 
 func _focus_menu_title() -> String:
@@ -3339,9 +3825,50 @@ func _format_duration(total_seconds: int) -> String:
 func _start_timer(kind: int, duration_seconds: int) -> void:
 	_cancel_auto_transition(false)
 	if timer_manager.start_timer(kind, duration_seconds):
+		var event_code := (
+			ActivityCenterSessionLogScript.FOCUS_STARTED
+			if kind == TimerManagerScript.Kind.FOCUS
+			else ActivityCenterSessionLogScript.BREAK_STARTED
+		)
+		_record_activity_center_event(
+			event_code,
+			_activity_center_subject_for_kind(kind)
+		)
 		_hide_notification()
 		if kind == TimerManagerScript.Kind.BREAK:
 			_show_pending_health_reminder()
+
+
+func _pause_or_resume_timer() -> void:
+	if timer_manager == null:
+		return
+	var kind: int = timer_manager.kind
+	var event_code := &""
+	if timer_manager.state == TimerManagerScript.State.RUNNING:
+		if timer_manager.pause():
+			event_code = ActivityCenterSessionLogScript.TIMER_PAUSED
+	elif timer_manager.state == TimerManagerScript.State.PAUSED:
+		if timer_manager.resume():
+			event_code = ActivityCenterSessionLogScript.TIMER_RESUMED
+	if not event_code.is_empty():
+		_record_activity_center_event(
+			event_code,
+			_activity_center_subject_for_kind(kind)
+		)
+
+
+func _cancel_current_timer() -> void:
+	if timer_manager == null:
+		return
+	var kind: int = timer_manager.kind
+	_cancel_auto_transition(false)
+	if not timer_manager.cancel():
+		return
+	_record_activity_center_event(
+		ActivityCenterSessionLogScript.TIMER_CANCELLED,
+		_activity_center_subject_for_kind(kind)
+	)
+	_hide_notification()
 
 
 func _restore_timer() -> void:
@@ -3374,6 +3901,15 @@ func _handle_timer_tick(_remaining_seconds: int) -> void:
 
 
 func _handle_timer_completed(kind: int) -> void:
+	var event_code := (
+		ActivityCenterSessionLogScript.FOCUS_COMPLETED
+		if kind == TimerManagerScript.Kind.FOCUS
+		else ActivityCenterSessionLogScript.BREAK_COMPLETED
+	)
+	_record_activity_center_event(
+		event_code,
+		_activity_center_subject_for_kind(kind)
+	)
 	pet.react_to_reminder()
 	if kind == TimerManagerScript.Kind.FOCUS:
 		if restoring_timer:
@@ -3413,7 +3949,11 @@ func _handle_reminder_tick(_kind: int, _remaining_seconds: int) -> void:
 	_update_reminder_menu()
 
 
-func _handle_reminder_due(_kind: int) -> void:
+func _handle_reminder_due(kind: int) -> void:
+	_record_activity_center_event(
+		ActivityCenterSessionLogScript.REMINDER_DUE,
+		_activity_center_subject_for_kind(kind)
+	)
 	_update_reminder_menu()
 	if (
 		restoring_reminders
@@ -3570,6 +4110,7 @@ func _try_show_check_in() -> bool:
 		or reminder_manager.current_due_kind()
 		!= TimerManagerScript.Kind.NONE
 		or notification_panel.visible
+		or activity_center_window.visible
 		or duration_settings_window.visible
 		or quiet_settings_window.visible
 		or language_settings_window.visible
@@ -3595,6 +4136,12 @@ func _toggle_reminder(kind: int) -> void:
 	var enable: bool = not reminder_manager.is_enabled(kind)
 	if not reminder_manager.set_enabled(kind, enable):
 		return
+	_record_activity_center_event(
+		ActivityCenterSessionLogScript.REMINDER_TURNED_ON
+		if enable
+		else ActivityCenterSessionLogScript.REMINDER_TURNED_OFF,
+		_activity_center_subject_for_kind(kind)
+	)
 	if enable:
 		var enabled_key := (
 			"water_enabled"
@@ -3625,6 +4172,10 @@ func _handle_complete_reminder() -> void:
 	var kind: int = reminder_manager.current_due_kind()
 	if reminder_manager.complete_due() == TimerManagerScript.Kind.NONE:
 		return
+	_record_activity_center_event(
+		ActivityCenterSessionLogScript.REMINDER_DONE,
+		_activity_center_subject_for_kind(kind)
+	)
 	if not _show_pending_health_reminder():
 		_show_notification(
 			_text("completed_next", [
@@ -3641,6 +4192,10 @@ func _handle_snooze_reminder() -> void:
 	var kind: int = reminder_manager.current_due_kind()
 	if reminder_manager.snooze_due() == TimerManagerScript.Kind.NONE:
 		return
+	_record_activity_center_event(
+		ActivityCenterSessionLogScript.REMINDER_SNOOZED,
+		_activity_center_subject_for_kind(kind)
+	)
 	if not _show_pending_health_reminder():
 		_show_notification(
 			_text("snoozed", [
@@ -3660,6 +4215,10 @@ func _handle_stop_reminder() -> void:
 		== TimerManagerScript.Kind.NONE
 	):
 		return
+	_record_activity_center_event(
+		ActivityCenterSessionLogScript.REMINDER_TURNED_OFF,
+		_activity_center_subject_for_kind(kind)
+	)
 	_hide_notification()
 	if not _show_pending_health_reminder():
 		_show_notification(
@@ -3675,6 +4234,10 @@ func _show_pending_health_reminder() -> bool:
 		reminder_manager == null
 		or _focus_is_running()
 		or reminder_manager.is_quiet_now()
+		or (
+			activity_center_window != null
+			and activity_center_window.visible
+		)
 	):
 		return false
 	var kind: int = reminder_manager.current_due_kind()
@@ -4183,6 +4746,11 @@ func _refresh_localized_ui() -> void:
 		_text("ambient_cards")
 	)
 	_set_menu_text(context_menu, MENU_ACTIVITY_SUBMENU, _text("activity"))
+	_set_menu_text(
+		context_menu,
+		MENU_ACTIVITY_CENTER,
+		_activity_center_menu_text()
+	)
 	_set_menu_text(context_menu, MENU_PETS_SUBMENU, _text("pets"))
 	_set_menu_text(context_menu, MENU_WINDOW_SUBMENU, _text("window"))
 	_set_menu_text(context_menu, MENU_SETTINGS_SUBMENU, _text("settings"))
@@ -4219,6 +4787,7 @@ func _refresh_localized_ui() -> void:
 			_text("developer")
 		)
 	_refresh_duration_settings_texts()
+	_refresh_activity_center_texts()
 	_refresh_quiet_settings_texts()
 	_refresh_language_settings_texts()
 	_refresh_pet_notes_settings_texts()
@@ -4226,6 +4795,7 @@ func _refresh_localized_ui() -> void:
 	_refresh_tray_ui()
 	_update_activity_menu()
 	_update_menu_checks()
+	_refresh_activity_center_state()
 
 
 func _load_settings() -> void:
