@@ -34,6 +34,11 @@ static func discover() -> Array[PetDefinition]:
 		if seen_ids.has(definition.pet_id):
 			push_warning("Duplicate pet id ignored: %s" % definition.pet_id)
 			continue
+		for error in definition.behavior_validation_errors():
+			push_warning(
+				"Optional pet behavior ignored in %s: %s"
+				% [definition_path, error]
+			)
 
 		seen_ids[definition.pet_id] = true
 		definitions.append(definition)

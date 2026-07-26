@@ -75,6 +75,7 @@ const LANGUAGE_SETTINGS_WINDOW_SIZE := Vector2i(390, 250)
 const LANGUAGE_SETTINGS_WINDOW_MAX_HEIGHT := 480
 const PET_NOTES_WINDOW_SIZE := Vector2i(420, 310)
 const PET_NOTES_WINDOW_MAX_HEIGHT := 520
+const BEHAVIOR_PREVIEW_WINDOW_SIZE := Vector2i(440, 470)
 const SETTINGS_WINDOW_SCREEN_MARGIN := 32
 const MENU_FONT_SIZE_MIN := 14
 const MENU_FONT_SIZE_BASE := 16
@@ -82,6 +83,17 @@ const MENU_FONT_SIZE_MAX := 32
 const LANGUAGE_OPTIONS := [
 	{"code": "en", "label_key": "language_english"},
 	{"code": "zh_CN", "label_key": "language_chinese"},
+]
+const BEHAVIOR_PREVIEW_SPECS := [
+	{"id": &"idle_blink", "label_key": "dev_preview_idle_blink"},
+	{"id": &"click_happy", "label_key": "dev_preview_click_happy"},
+	{"id": &"keyboard", "label_key": "dev_preview_keyboard"},
+	{"id": &"mouse", "label_key": "dev_preview_mouse"},
+	{"id": &"focus_calm", "label_key": "dev_preview_focus_calm"},
+	{
+		"id": &"reminder_attention",
+		"label_key": "dev_preview_reminder_attention",
+	},
 ]
 
 const MENU_FOCUS_SUBMENU := 1
@@ -126,6 +138,7 @@ const MENU_AMBIENT_CARDS := 59
 const MENU_STOP_REMINDER := 60
 const MENU_QUIET_HOURS := 62
 const MENU_DEV_AMBIENT_CARD := 64
+const MENU_DEV_BEHAVIOR_PREVIEW := 65
 const MENU_EXIT := 90
 const MENU_PET_BASE := 1000
 
@@ -211,6 +224,12 @@ var google_calendar_sync_button: Button
 var google_calendar_disconnect_button: Button
 var pet_notes_save_button: Button
 var pet_notes_cancel_button: Button
+var behavior_preview_window: Window
+var behavior_preview_title: Label
+var behavior_preview_note: Label
+var behavior_preview_pet_label: Label
+var behavior_preview_buttons: Dictionary = {}
+var behavior_preview_close_button: Button
 var checkbox_unchecked_icon: Texture2D
 var checkbox_checked_icon: Texture2D
 var notification_timer: Timer
@@ -300,6 +319,8 @@ func _ready() -> void:
 	_build_quiet_settings_window()
 	_build_language_settings_window()
 	_build_pet_notes_settings_window()
+	if OS.has_feature("editor"):
+		_build_behavior_preview_window()
 	_build_context_menu()
 	_build_system_tray()
 	_apply_scale(settings.display_scale, false)
@@ -575,6 +596,7 @@ func _select_pet(pet_id: StringName, save := true) -> bool:
 		)
 	_update_menu_checks()
 	_refresh_tray_ui()
+	_refresh_behavior_preview_state()
 
 	if save:
 		_save_settings()
@@ -1165,6 +1187,175 @@ func _style_notification_stop_button(button: Button) -> void:
 		style.set_border_width_all(1)
 		style.set_corner_radius_all(5)
 		button.add_theme_stylebox_override(str(state_data[0]), style)
+
+
+func _build_behavior_preview_window() -> void:
+	behavior_preview_window = Window.new()
+	behavior_preview_window.name = "BehaviorPreviewWindow"
+	behavior_preview_window.size = BEHAVIOR_PREVIEW_WINDOW_SIZE
+	behavior_preview_window.min_size = BEHAVIOR_PREVIEW_WINDOW_SIZE
+	behavior_preview_window.unresizable = true
+	behavior_preview_window.transient = true
+	behavior_preview_window.exclusive = false
+	behavior_preview_window.visible = false
+	behavior_preview_window.close_requested.connect(
+		behavior_preview_window.hide
+	)
+	add_child(behavior_preview_window)
+
+	var background := ColorRect.new()
+	background.color = Color("#2B2434")
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	behavior_preview_window.add_child(background)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	behavior_preview_window.add_child(margin)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 9)
+	margin.add_child(content)
+
+	behavior_preview_title = Label.new()
+	behavior_preview_title.add_theme_font_size_override("font_size", 20)
+	behavior_preview_title.add_theme_color_override(
+		"font_color",
+		Color("#F5EDF7")
+	)
+	content.add_child(behavior_preview_title)
+
+	behavior_preview_note = Label.new()
+	behavior_preview_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	behavior_preview_note.custom_minimum_size = Vector2(0, 48)
+	behavior_preview_note.add_theme_color_override(
+		"font_color",
+		Color("#C7BCCB")
+	)
+	content.add_child(behavior_preview_note)
+
+	behavior_preview_pet_label = Label.new()
+	behavior_preview_pet_label.add_theme_font_size_override("font_size", 16)
+	behavior_preview_pet_label.add_theme_color_override(
+		"font_color",
+		Color("#E6AFCB")
+	)
+	content.add_child(behavior_preview_pet_label)
+
+	for spec in BEHAVIOR_PREVIEW_SPECS:
+		var behavior_id: StringName = spec["id"]
+		var button := Button.new()
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2(0, 38)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(
+			_preview_pet_behavior.bind(behavior_id)
+		)
+		behavior_preview_buttons[behavior_id] = button
+		content.add_child(button)
+
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 8)
+	content.add_child(footer)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
+	behavior_preview_close_button = Button.new()
+	behavior_preview_close_button.focus_mode = Control.FOCUS_NONE
+	behavior_preview_close_button.custom_minimum_size = Vector2(90, 34)
+	behavior_preview_close_button.pressed.connect(
+		behavior_preview_window.hide
+	)
+	footer.add_child(behavior_preview_close_button)
+	_refresh_behavior_preview_state()
+
+
+func _open_behavior_preview() -> void:
+	if behavior_preview_window == null:
+		return
+	_set_pet_window_visible(true)
+	_refresh_behavior_preview_state()
+	_popup_behavior_preview_window()
+
+
+func _popup_behavior_preview_window() -> void:
+	var scale := _settings_window_scale(
+		behavior_preview_window,
+		BEHAVIOR_PREVIEW_WINDOW_SIZE
+	)
+	var target_size := Vector2i(
+		roundi(BEHAVIOR_PREVIEW_WINDOW_SIZE.x * scale),
+		roundi(BEHAVIOR_PREVIEW_WINDOW_SIZE.y * scale)
+	)
+	behavior_preview_window.min_size = Vector2i.ZERO
+	behavior_preview_window.content_scale_mode = (
+		Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	)
+	behavior_preview_window.content_scale_size = (
+		BEHAVIOR_PREVIEW_WINDOW_SIZE
+	)
+	behavior_preview_window.size = target_size
+	behavior_preview_window.min_size = target_size
+
+	var screen := _settings_window_screen(behavior_preview_window)
+	var usable_rect := DisplayServer.screen_get_usable_rect(screen)
+	var root_window := get_window()
+	var gap := roundi(12.0 * scale)
+	var target_position := Vector2i(
+		root_window.position.x + root_window.size.x + gap,
+		root_window.position.y
+	)
+	if target_position.x + target_size.x > usable_rect.end.x:
+		target_position.x = root_window.position.x - target_size.x - gap
+	target_position.x = clampi(
+		target_position.x,
+		usable_rect.position.x,
+		maxi(
+			usable_rect.position.x,
+			usable_rect.end.x - target_size.x
+		)
+	)
+	target_position.y = clampi(
+		target_position.y,
+		usable_rect.position.y,
+		maxi(
+			usable_rect.position.y,
+			usable_rect.end.y - target_size.y
+		)
+	)
+	behavior_preview_window.popup(
+		Rect2i(target_position, target_size)
+	)
+
+
+func _preview_pet_behavior(behavior_id: StringName) -> bool:
+	if pet == null:
+		return false
+	return pet.preview_behavior(behavior_id)
+
+
+func _refresh_behavior_preview_state() -> void:
+	if behavior_preview_window == null:
+		return
+	behavior_preview_window.title = _text(
+		"dev_behavior_preview_window_title"
+	)
+	behavior_preview_title.text = _text(
+		"dev_behavior_preview_heading"
+	)
+	behavior_preview_note.text = _text(
+		"dev_behavior_preview_note"
+	)
+	behavior_preview_pet_label.text = pet.get_display_name()
+	for spec in BEHAVIOR_PREVIEW_SPECS:
+		var behavior_id: StringName = spec["id"]
+		var button: Button = behavior_preview_buttons[behavior_id]
+		button.text = _text(str(spec["label_key"]))
+		button.disabled = not pet.has_behavior(behavior_id)
+	behavior_preview_close_button.text = _text("activity_center_close")
 
 
 func _build_duration_settings_window() -> void:
@@ -2766,6 +2957,11 @@ func _build_context_menu() -> void:
 			_text("dev_ambient_card"),
 			MENU_DEV_AMBIENT_CARD
 		)
+		developer_menu.add_separator()
+		developer_menu.add_item(
+			_text("dev_behavior_preview"),
+			MENU_DEV_BEHAVIOR_PREVIEW
+		)
 		context_menu.add_submenu_node_item(
 			_text("developer"),
 			developer_menu,
@@ -3072,6 +3268,9 @@ func _handle_menu_item(id: int) -> void:
 				_text("dev_ambient_card_message"),
 				CheckInManagerScript.DEFAULT_DISPLAY_SECONDS
 			)
+		MENU_DEV_BEHAVIOR_PREVIEW:
+			_open_behavior_preview()
+			return
 		MENU_PAUSE_RESUME_TIMER:
 			_pause_or_resume_timer()
 		MENU_CANCEL_TIMER:
@@ -4782,10 +4981,16 @@ func _refresh_localized_ui() -> void:
 			_text("dev_ambient_card")
 		)
 		_set_menu_text(
+			developer_menu,
+			MENU_DEV_BEHAVIOR_PREVIEW,
+			_text("dev_behavior_preview")
+		)
+		_set_menu_text(
 			context_menu,
 			MENU_DEVELOPER_SUBMENU,
 			_text("developer")
 		)
+		_refresh_behavior_preview_state()
 	_refresh_duration_settings_texts()
 	_refresh_activity_center_texts()
 	_refresh_quiet_settings_texts()
