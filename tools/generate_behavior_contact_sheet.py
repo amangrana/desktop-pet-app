@@ -9,13 +9,18 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 
-CORE_BEHAVIORS = (
+REQUIRED_BEHAVIORS = (
     "idle_blink",
     "click_happy",
     "keyboard",
     "mouse",
     "focus_calm",
     "reminder_attention",
+)
+OPTIONAL_BEHAVIOR_ORDER = (
+    "idle_look",
+    "idle_yawn",
+    "idle_stretch",
 )
 CANVAS_WIDTH = 1800
 HEADER_HEIGHT = 150
@@ -143,7 +148,7 @@ def generate_contact_sheet(pet_dir: Path, output: Path) -> Path:
     master = _master_path(pet_dir)
     rows: list[tuple[str, list[Path]]] = [("idle", [master])]
     missing: list[str] = []
-    for behavior_id in CORE_BEHAVIORS:
+    for behavior_id in REQUIRED_BEHAVIORS:
         frames = _behavior_frames(pet_dir, behavior_id)
         if not frames:
             missing.append(behavior_id)
@@ -153,6 +158,21 @@ def generate_contact_sheet(pet_dir: Path, output: Path) -> Path:
             "Missing runtime behavior directories or PNG frames: "
             + ", ".join(missing)
         )
+
+    behavior_root = pet_dir / "runtime" / "behaviors"
+    discovered = {
+        path.name
+        for path in behavior_root.iterdir()
+        if path.is_dir() and _behavior_frames(pet_dir, path.name)
+    }
+    discovered.difference_update(REQUIRED_BEHAVIORS)
+    for behavior_id in OPTIONAL_BEHAVIOR_ORDER:
+        if behavior_id not in discovered:
+            continue
+        rows.append((behavior_id, _behavior_frames(pet_dir, behavior_id)))
+        discovered.remove(behavior_id)
+    for behavior_id in sorted(discovered):
+        rows.append((behavior_id, _behavior_frames(pet_dir, behavior_id)))
 
     height = HEADER_HEIGHT + ROW_HEIGHT * len(rows) + FOOTER_HEIGHT
     sheet = Image.new("RGBA", (CANVAS_WIDTH, height), SHEET_BACKGROUND)

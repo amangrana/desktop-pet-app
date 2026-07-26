@@ -28,6 +28,9 @@ func _run() -> void:
 	_test_definition_lookup_and_validation(leo_texture, bobo_texture)
 	_test_standard_profile(leo_texture)
 	_test_leo_pilot_pack()
+	_test_bobo_pilot_pack()
+	_test_mable_pilot_pack()
+	_test_milo_pilot_pack()
 	_test_runtime_priority_focus_and_fallback(leo_texture, bobo_texture)
 
 	if _failed:
@@ -236,6 +239,9 @@ func _test_leo_pilot_pack() -> void:
 		return
 	var blink := leo_definition.behavior_by_id(&"idle_blink")
 	var click_happy := leo_definition.behavior_by_id(&"click_happy")
+	var idle_look := leo_definition.behavior_by_id(&"idle_look")
+	var idle_yawn := leo_definition.behavior_by_id(&"idle_yawn")
+	var idle_stretch := leo_definition.behavior_by_id(&"idle_stretch")
 	var focus_calm := leo_definition.behavior_by_id(&"focus_calm")
 	var reminder_attention := leo_definition.behavior_by_id(
 		&"reminder_attention"
@@ -273,6 +279,74 @@ func _test_leo_pilot_pack() -> void:
 			and click_happy.texture_at(0.9) == click_happy.frames[1],
 			"Leo's happy face must remain visible after its short entrance."
 		)
+	_expect(
+		idle_look != null
+		and blink != null
+		and idle_look.trigger
+			== PetBehaviorDefinition.Trigger.RANDOM_IDLE
+		and idle_look.frames.size() == 6
+		and idle_look.frames[0] == leo_definition.idle_texture
+		and idle_look.frames[5] == leo_definition.idle_texture
+		and idle_look.frames[1] == idle_look.frames[2]
+		and idle_look.frames[3] == idle_look.frames[4]
+		and idle_look.frames[1] != idle_look.frames[3]
+		and idle_look.weight < blink.weight
+		and is_equal_approx(idle_look.cooldown_seconds, 20.0)
+		and not idle_look.allowed_during_focus,
+		(
+			"Leo's idle look must be a low-frequency, cooldown-limited "
+			+ "random action outside Focus."
+		)
+	)
+	_expect(
+		idle_yawn != null
+		and idle_look != null
+		and idle_yawn.trigger
+			== PetBehaviorDefinition.Trigger.RANDOM_IDLE
+		and idle_yawn.frames.size() == 6
+		and idle_yawn.frames[0] == leo_definition.idle_texture
+		and idle_yawn.frames[5] == leo_definition.idle_texture
+		and idle_yawn.frames[2] == idle_yawn.frames[3]
+		and idle_yawn.frames[1] != idle_yawn.frames[2]
+		and idle_yawn.frames[2] != idle_yawn.frames[4]
+		and idle_yawn.weight < idle_look.weight
+		and is_equal_approx(idle_yawn.cooldown_seconds, 90.0)
+		and not idle_yawn.allowed_during_focus
+		and is_equal_approx(
+			idle_yawn.natural_duration_seconds(),
+			3.0
+		),
+		(
+			"Leo's yawn must be a rare three-second random action "
+			+ "with a long cooldown outside Focus."
+		)
+	)
+	_expect(
+		idle_stretch != null
+		and idle_yawn != null
+		and idle_stretch.trigger
+			== PetBehaviorDefinition.Trigger.RANDOM_IDLE
+		and idle_stretch.frames.size() == 6
+		and idle_stretch.frames[0] == leo_definition.idle_texture
+		and idle_stretch.frames[5] == leo_definition.idle_texture
+		and idle_stretch.frames[2] == idle_stretch.frames[3]
+		and idle_stretch.frames[1] != idle_stretch.frames[2]
+		and idle_stretch.frames[2] != idle_stretch.frames[4]
+		and idle_stretch.weight < idle_yawn.weight
+		and is_equal_approx(
+			idle_stretch.cooldown_seconds,
+			150.0
+		)
+		and not idle_stretch.allowed_during_focus
+		and is_equal_approx(
+			idle_stretch.natural_duration_seconds(),
+			3.0
+		),
+		(
+			"Leo's stretch must be the rarest three-second random action "
+			+ "with a long cooldown outside Focus."
+		)
+	)
 	_expect(
 		focus_calm != null
 		and focus_calm.trigger == PetBehaviorDefinition.Trigger.FOCUS
@@ -361,8 +435,13 @@ func _test_leo_pilot_pack() -> void:
 	visual.set_definition(leo_definition)
 	visual._process(10.0)
 	_expect(
-		visual.get_current_behavior_id() == &"idle_blink",
-		"Leo must automatically start the blink when its idle slot is due."
+		visual.get_current_behavior_id() in [
+			&"idle_blink",
+			&"idle_look",
+			&"idle_yawn",
+			&"idle_stretch",
+		],
+		"Leo must automatically start a configured random idle action."
 	)
 	visual.react_to_click()
 	_expect(
@@ -437,6 +516,33 @@ func _test_leo_pilot_pack() -> void:
 		"Developer preview must restore the prior focus base state."
 	)
 	_expect(
+		visual.preview_behavior(&"idle_look"),
+		"The developer preview API must expose Leo's optional idle look."
+	)
+	visual._process(3.1)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Idle-look preview must restore the prior focus base state."
+	)
+	_expect(
+		visual.preview_behavior(&"idle_yawn"),
+		"The developer preview API must expose Leo's optional idle yawn."
+	)
+	visual._process(3.1)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Idle-yawn preview must restore the prior focus base state."
+	)
+	_expect(
+		visual.preview_behavior(&"idle_stretch"),
+		"The developer preview API must expose Leo's optional stretch."
+	)
+	visual._process(3.1)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Idle-stretch preview must restore the prior focus base state."
+	)
+	_expect(
 		not visual.preview_behavior(&"missing_behavior"),
 		"Developer preview must safely reject an unavailable behavior."
 	)
@@ -454,6 +560,372 @@ func _test_leo_pilot_pack() -> void:
 	_expect(
 		visual.get_current_behavior_id() == &"idle",
 		"Ending focus must return Leo to his normal idle state."
+	)
+	visual.queue_free()
+
+
+func _test_bobo_pilot_pack() -> void:
+	var bobo_definition := load(
+		"res://assets/pets/bobo/pet.tres"
+	) as PetDefinition
+	_expect(bobo_definition != null, "Bobo's pet package must load.")
+	if bobo_definition == null:
+		return
+
+	var blink := bobo_definition.behavior_by_id(&"idle_blink")
+	var click_happy := bobo_definition.behavior_by_id(&"click_happy")
+	var idle_look := bobo_definition.behavior_by_id(&"idle_look")
+	var idle_yawn := bobo_definition.behavior_by_id(&"idle_yawn")
+	var idle_stretch := bobo_definition.behavior_by_id(&"idle_stretch")
+	var focus_calm := bobo_definition.behavior_by_id(&"focus_calm")
+	var reminder_attention := bobo_definition.behavior_by_id(
+		&"reminder_attention"
+	)
+	var keyboard := bobo_definition.behavior_by_id(&"keyboard")
+	var mouse := bobo_definition.behavior_by_id(&"mouse")
+	_expect(
+		blink != null
+		and blink.frames.size() == 3
+		and blink.frames[0] == bobo_definition.idle_texture
+		and blink.frames[2] == bobo_definition.idle_texture,
+		"Bobo's blink must close and return through the idle frame."
+	)
+	_expect(
+		click_happy != null
+		and click_happy.frames.size() == 2
+		and is_equal_approx(
+			click_happy.runtime_duration_seconds(),
+			1.0
+		),
+		"Bobo's happy click response must last one second."
+	)
+	_expect(
+		idle_look != null
+		and idle_yawn != null
+		and idle_stretch != null
+		and idle_look.frames.size() == 6
+		and idle_yawn.frames.size() == 6
+		and idle_stretch.frames.size() == 6
+		and idle_look.frames[0] == bobo_definition.idle_texture
+		and idle_yawn.frames[0] == bobo_definition.idle_texture
+		and idle_stretch.frames[0] == bobo_definition.idle_texture
+		and idle_look.weight > idle_yawn.weight
+		and idle_yawn.weight > idle_stretch.weight
+		and is_equal_approx(idle_look.cooldown_seconds, 20.0)
+		and is_equal_approx(idle_yawn.cooldown_seconds, 90.0)
+		and is_equal_approx(
+			idle_stretch.cooldown_seconds,
+			150.0
+		)
+		and not idle_look.allowed_during_focus
+		and not idle_yawn.allowed_during_focus
+		and not idle_stretch.allowed_during_focus,
+		(
+			"Bobo's three optional idle actions must use the shared "
+			+ "frequency and Focus-suppression profile."
+		)
+	)
+	_expect(
+		focus_calm != null
+		and focus_calm.playback == PetBehaviorDefinition.Playback.LOOP
+		and focus_calm.frames.size() == 6
+		and focus_calm.frames[5] != focus_calm.frames[0],
+		"Bobo's focus loop must include a distinct slow-blink frame."
+	)
+	_expect(
+		reminder_attention != null
+		and reminder_attention.playback
+			== PetBehaviorDefinition.Playback.PING_PONG
+		and reminder_attention.allowed_during_focus,
+		"Bobo's attention gesture must pulse and remain focus-safe."
+	)
+	_expect(
+		keyboard != null
+		and keyboard.frames.size() == 2
+		and keyboard.frames[0] != keyboard.frames[1]
+		and keyboard.allowed_during_focus,
+		"Bobo's keyboard behavior must alternate two distinct paw taps."
+	)
+	_expect(
+		mouse != null
+		and mouse.frames.size() == 2
+		and mouse.frames[0] != mouse.frames[1]
+		and mouse.allowed_during_focus,
+		"Bobo's mouse behavior must alternate two distinct head tilts."
+	)
+	_expect(
+		bobo_definition.behavior_validation_errors().is_empty(),
+		"Bobo's behavior frames must satisfy canvas validation."
+	)
+	_expect(
+		PetBehaviorProfileScript.validation_errors(
+			bobo_definition,
+			true
+		).is_empty(),
+		"Bobo's complete version-one behavior profile must pass."
+	)
+
+	var visual := PetVisualScript.new()
+	root.add_child(visual)
+	visual.set_definition(bobo_definition)
+	visual.set_focus_mode(true)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Bobo must enter her configured calm loop during Focus."
+	)
+	visual.react_to_reminder()
+	_expect(
+		visual.get_current_behavior_id() == &"reminder_attention",
+		"Bobo's attention gesture must override the Focus base."
+	)
+	visual._process(2.41)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Bobo must return to her Focus loop after the reminder."
+	)
+	visual.queue_free()
+
+
+func _test_mable_pilot_pack() -> void:
+	var mable_definition := load(
+		"res://assets/pets/mable/pet.tres"
+	) as PetDefinition
+	_expect(mable_definition != null, "Mable's pet package must load.")
+	if mable_definition == null:
+		return
+
+	var blink := mable_definition.behavior_by_id(&"idle_blink")
+	var click_happy := mable_definition.behavior_by_id(&"click_happy")
+	var idle_look := mable_definition.behavior_by_id(&"idle_look")
+	var idle_yawn := mable_definition.behavior_by_id(&"idle_yawn")
+	var idle_stretch := mable_definition.behavior_by_id(&"idle_stretch")
+	var focus_calm := mable_definition.behavior_by_id(&"focus_calm")
+	var reminder_attention := mable_definition.behavior_by_id(
+		&"reminder_attention"
+	)
+	var keyboard := mable_definition.behavior_by_id(&"keyboard")
+	var mouse := mable_definition.behavior_by_id(&"mouse")
+	_expect(
+		blink != null
+		and blink.frames.size() == 3
+		and blink.frames[0] == mable_definition.idle_texture
+		and blink.frames[2] == mable_definition.idle_texture,
+		"Mable's blink must close and return through the idle frame."
+	)
+	_expect(
+		click_happy != null
+		and click_happy.frames.size() == 2
+		and is_equal_approx(
+			click_happy.runtime_duration_seconds(),
+			1.0
+		),
+		"Mable's happy click response must last one second."
+	)
+	_expect(
+		idle_look != null
+		and idle_yawn != null
+		and idle_stretch != null
+		and idle_look.frames.size() == 6
+		and idle_yawn.frames.size() == 6
+		and idle_stretch.frames.size() == 6
+		and idle_look.frames[0] == mable_definition.idle_texture
+		and idle_yawn.frames[0] == mable_definition.idle_texture
+		and idle_stretch.frames[0] == mable_definition.idle_texture
+		and idle_look.weight > idle_yawn.weight
+		and idle_yawn.weight > idle_stretch.weight
+		and is_equal_approx(idle_look.cooldown_seconds, 20.0)
+		and is_equal_approx(idle_yawn.cooldown_seconds, 90.0)
+		and is_equal_approx(
+			idle_stretch.cooldown_seconds,
+			150.0
+		)
+		and not idle_look.allowed_during_focus
+		and not idle_yawn.allowed_during_focus
+		and not idle_stretch.allowed_during_focus,
+		(
+			"Mable's three optional idle actions must use the shared "
+			+ "weight, cooldown, and Focus rules."
+		)
+	)
+	_expect(
+		focus_calm != null
+		and focus_calm.playback == PetBehaviorDefinition.Playback.LOOP
+		and focus_calm.frames.size() == 6
+		and focus_calm.frames[5] != focus_calm.frames[0],
+		"Mable's focus loop must include a distinct slow-blink frame."
+	)
+	_expect(
+		reminder_attention != null
+		and reminder_attention.playback
+			== PetBehaviorDefinition.Playback.PING_PONG
+		and reminder_attention.allowed_during_focus,
+		"Mable's attention gesture must pulse and remain focus-safe."
+	)
+	_expect(
+		keyboard != null
+		and keyboard.frames.size() == 2
+		and keyboard.frames[0] != keyboard.frames[1]
+		and keyboard.allowed_during_focus,
+		"Mable's keyboard behavior must alternate two distinct paw taps."
+	)
+	_expect(
+		mouse != null
+		and mouse.frames.size() == 2
+		and mouse.frames[0] != mouse.frames[1]
+		and mouse.allowed_during_focus,
+		"Mable's mouse behavior must alternate two distinct head tilts."
+	)
+	_expect(
+		mable_definition.behavior_validation_errors().is_empty(),
+		"Mable's behavior frames must satisfy canvas validation."
+	)
+	_expect(
+		PetBehaviorProfileScript.validation_errors(
+			mable_definition,
+			true
+		).is_empty(),
+		"Mable's complete version-one behavior profile must pass."
+	)
+
+	var visual := PetVisualScript.new()
+	root.add_child(visual)
+	visual.set_definition(mable_definition)
+	visual.set_focus_mode(true)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Mable must enter her configured calm loop during Focus."
+	)
+	visual.react_to_reminder()
+	_expect(
+		visual.get_current_behavior_id() == &"reminder_attention",
+		"Mable's attention gesture must override the Focus base."
+	)
+	visual._process(2.41)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Mable must return to her Focus loop after the reminder."
+	)
+	visual.queue_free()
+
+
+func _test_milo_pilot_pack() -> void:
+	var milo_definition := load(
+		"res://assets/pets/milo/pet.tres"
+	) as PetDefinition
+	_expect(milo_definition != null, "Milo's pet package must load.")
+	if milo_definition == null:
+		return
+
+	var blink := milo_definition.behavior_by_id(&"idle_blink")
+	var click_happy := milo_definition.behavior_by_id(&"click_happy")
+	var idle_look := milo_definition.behavior_by_id(&"idle_look")
+	var idle_yawn := milo_definition.behavior_by_id(&"idle_yawn")
+	var idle_stretch := milo_definition.behavior_by_id(&"idle_stretch")
+	var focus_calm := milo_definition.behavior_by_id(&"focus_calm")
+	var reminder_attention := milo_definition.behavior_by_id(
+		&"reminder_attention"
+	)
+	var keyboard := milo_definition.behavior_by_id(&"keyboard")
+	var mouse := milo_definition.behavior_by_id(&"mouse")
+	_expect(
+		blink != null
+		and blink.frames.size() == 3
+		and blink.frames[0] == milo_definition.idle_texture
+		and blink.frames[2] == milo_definition.idle_texture,
+		"Milo's blink must close and return through the idle frame."
+	)
+	_expect(
+		click_happy != null
+		and click_happy.frames.size() == 2
+		and is_equal_approx(
+			click_happy.runtime_duration_seconds(),
+			1.0
+		),
+		"Milo's happy click response must last one second."
+	)
+	_expect(
+		idle_look != null
+		and idle_yawn != null
+		and idle_stretch != null
+		and idle_look.frames.size() == 6
+		and idle_yawn.frames.size() == 6
+		and idle_stretch.frames.size() == 6
+		and idle_look.frames[0] == milo_definition.idle_texture
+		and idle_yawn.frames[0] == milo_definition.idle_texture
+		and idle_stretch.frames[0] == milo_definition.idle_texture
+		and idle_look.weight > idle_yawn.weight
+		and idle_yawn.weight > idle_stretch.weight
+		and is_equal_approx(idle_look.cooldown_seconds, 20.0)
+		and is_equal_approx(idle_yawn.cooldown_seconds, 90.0)
+		and is_equal_approx(
+			idle_stretch.cooldown_seconds,
+			150.0
+		)
+		and not idle_look.allowed_during_focus
+		and not idle_yawn.allowed_during_focus
+		and not idle_stretch.allowed_during_focus,
+		(
+			"Milo's three optional idle actions must use the shared "
+			+ "weight, cooldown, and Focus rules."
+		)
+	)
+	_expect(
+		focus_calm != null
+		and focus_calm.playback == PetBehaviorDefinition.Playback.LOOP
+		and focus_calm.frames.size() == 6
+		and focus_calm.frames[5] != focus_calm.frames[0],
+		"Milo's focus loop must include a distinct slow-blink frame."
+	)
+	_expect(
+		reminder_attention != null
+		and reminder_attention.playback
+			== PetBehaviorDefinition.Playback.PING_PONG
+		and reminder_attention.allowed_during_focus,
+		"Milo's attention gesture must pulse and remain focus-safe."
+	)
+	_expect(
+		keyboard != null
+		and keyboard.frames.size() == 2
+		and keyboard.frames[0] != keyboard.frames[1]
+		and keyboard.allowed_during_focus,
+		"Milo's keyboard behavior must alternate two distinct paw taps."
+	)
+	_expect(
+		mouse != null
+		and mouse.frames.size() == 2
+		and mouse.frames[0] != mouse.frames[1]
+		and mouse.allowed_during_focus,
+		"Milo's mouse behavior must alternate two distinct head tilts."
+	)
+	_expect(
+		milo_definition.behavior_validation_errors().is_empty(),
+		"Milo's behavior frames must satisfy canvas validation."
+	)
+	_expect(
+		PetBehaviorProfileScript.validation_errors(
+			milo_definition,
+			true
+		).is_empty(),
+		"Milo's complete version-one behavior profile must pass."
+	)
+
+	var visual := PetVisualScript.new()
+	root.add_child(visual)
+	visual.set_definition(milo_definition)
+	visual.set_focus_mode(true)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Milo must enter his configured calm loop during Focus."
+	)
+	visual.react_to_reminder()
+	_expect(
+		visual.get_current_behavior_id() == &"reminder_attention",
+		"Milo's attention gesture must override the Focus base."
+	)
+	visual._process(2.41)
+	_expect(
+		visual.get_current_behavior_id() == &"focus_calm",
+		"Milo must return to his Focus loop after the reminder."
 	)
 	visual.queue_free()
 

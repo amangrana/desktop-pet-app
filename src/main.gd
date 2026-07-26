@@ -84,17 +84,28 @@ const LANGUAGE_OPTIONS := [
 	{"code": "en", "label_key": "language_english"},
 	{"code": "zh_CN", "label_key": "language_chinese"},
 ]
-const BEHAVIOR_PREVIEW_SPECS := [
-	{"id": &"idle_blink", "label_key": "dev_preview_idle_blink"},
-	{"id": &"click_happy", "label_key": "dev_preview_click_happy"},
-	{"id": &"keyboard", "label_key": "dev_preview_keyboard"},
-	{"id": &"mouse", "label_key": "dev_preview_mouse"},
-	{"id": &"focus_calm", "label_key": "dev_preview_focus_calm"},
-	{
-		"id": &"reminder_attention",
-		"label_key": "dev_preview_reminder_attention",
-	},
+const BEHAVIOR_PREVIEW_STANDARD_ORDER := [
+	&"idle_blink",
+	&"click_happy",
+	&"keyboard",
+	&"mouse",
+	&"focus_calm",
+	&"reminder_attention",
+	&"idle_look",
+	&"idle_yawn",
+	&"idle_stretch",
 ]
+const BEHAVIOR_PREVIEW_LABEL_KEYS := {
+	&"idle_blink": "dev_preview_idle_blink",
+	&"click_happy": "dev_preview_click_happy",
+	&"keyboard": "dev_preview_keyboard",
+	&"mouse": "dev_preview_mouse",
+	&"focus_calm": "dev_preview_focus_calm",
+	&"reminder_attention": "dev_preview_reminder_attention",
+	&"idle_look": "dev_preview_idle_look",
+	&"idle_yawn": "dev_preview_idle_yawn",
+	&"idle_stretch": "dev_preview_idle_stretch",
+}
 
 const MENU_FOCUS_SUBMENU := 1
 const MENU_REMINDERS_SUBMENU := 2
@@ -228,6 +239,7 @@ var behavior_preview_window: Window
 var behavior_preview_title: Label
 var behavior_preview_note: Label
 var behavior_preview_pet_label: Label
+var behavior_preview_list: VBoxContainer
 var behavior_preview_buttons: Dictionary = {}
 var behavior_preview_close_button: Button
 var checkbox_unchecked_icon: Texture2D
@@ -301,6 +313,7 @@ var pet_notes_base_status_height := -1
 
 
 func _ready() -> void:
+	pet.visual_shape_changed.connect(_handle_pet_visual_shape_changed)
 	_load_settings()
 	_build_activity_pipeline()
 	_build_timer_pipeline()
@@ -330,6 +343,13 @@ func _ready() -> void:
 	restoring_saved_state = false
 	_update_menu_checks()
 	_start_preview_capture_if_requested()
+
+
+func _handle_pet_visual_shape_changed() -> void:
+	var window := get_window()
+	if window.size.x <= 0 or window.size.y <= 0:
+		return
+	_update_mouse_passthrough(window.size)
 
 
 func _build_activity_pipeline() -> void:
@@ -1245,17 +1265,17 @@ func _build_behavior_preview_window() -> void:
 	)
 	content.add_child(behavior_preview_pet_label)
 
-	for spec in BEHAVIOR_PREVIEW_SPECS:
-		var behavior_id: StringName = spec["id"]
-		var button := Button.new()
-		button.focus_mode = Control.FOCUS_NONE
-		button.custom_minimum_size = Vector2(0, 38)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.pressed.connect(
-			_preview_pet_behavior.bind(behavior_id)
-		)
-		behavior_preview_buttons[behavior_id] = button
-		content.add_child(button)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 220)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	content.add_child(scroll)
+
+	behavior_preview_list = VBoxContainer.new()
+	behavior_preview_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	behavior_preview_list.add_theme_constant_override("separation", 9)
+	scroll.add_child(behavior_preview_list)
 
 	var footer := HBoxContainer.new()
 	footer.add_theme_constant_override("separation", 8)
@@ -1349,13 +1369,69 @@ func _refresh_behavior_preview_state() -> void:
 	behavior_preview_note.text = _text(
 		"dev_behavior_preview_note"
 	)
-	behavior_preview_pet_label.text = pet.get_display_name()
-	for spec in BEHAVIOR_PREVIEW_SPECS:
-		var behavior_id: StringName = spec["id"]
-		var button: Button = behavior_preview_buttons[behavior_id]
-		button.text = _text(str(spec["label_key"]))
-		button.disabled = not pet.has_behavior(behavior_id)
+	behavior_preview_pet_label.text = (
+		pet.get_display_name() if pet != null else ""
+	)
+	_rebuild_behavior_preview_buttons()
 	behavior_preview_close_button.text = _text("activity_center_close")
+
+
+func _rebuild_behavior_preview_buttons() -> void:
+	if behavior_preview_list == null:
+		return
+	for child in behavior_preview_list.get_children():
+		behavior_preview_list.remove_child(child)
+		child.queue_free()
+	behavior_preview_buttons.clear()
+
+	for behavior_id in _configured_behavior_preview_ids():
+		var button := Button.new()
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2(0, 38)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.text = _behavior_preview_label(behavior_id)
+		button.pressed.connect(
+			_preview_pet_behavior.bind(behavior_id)
+		)
+		behavior_preview_buttons[behavior_id] = button
+		behavior_preview_list.add_child(button)
+
+
+func _configured_behavior_preview_ids() -> Array[StringName]:
+	var configured: Array[StringName] = []
+	if pet == null or pet.definition == null:
+		return configured
+
+	var discovered: Dictionary = {}
+	for behavior in pet.definition.behaviors:
+		if (
+			behavior == null
+			or not behavior.is_configured()
+			or discovered.has(behavior.behavior_id)
+		):
+			continue
+		discovered[behavior.behavior_id] = true
+
+	for behavior_id in BEHAVIOR_PREVIEW_STANDARD_ORDER:
+		if discovered.has(behavior_id):
+			configured.append(behavior_id)
+			discovered.erase(behavior_id)
+	for behavior in pet.definition.behaviors:
+		if (
+			behavior != null
+			and discovered.has(behavior.behavior_id)
+		):
+			configured.append(behavior.behavior_id)
+			discovered.erase(behavior.behavior_id)
+	return configured
+
+
+func _behavior_preview_label(behavior_id: StringName) -> String:
+	if BEHAVIOR_PREVIEW_LABEL_KEYS.has(behavior_id):
+		return _text(
+			str(BEHAVIOR_PREVIEW_LABEL_KEYS[behavior_id])
+		)
+	return String(behavior_id).replace("_", " ").capitalize()
 
 
 func _build_duration_settings_window() -> void:
