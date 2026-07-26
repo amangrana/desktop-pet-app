@@ -28,6 +28,33 @@
 - 将早期金黄色巴哥犬原型完整保留为第三只宠物 Milo
 - 以用户提供的真实照片为原型创作蓝眼西伯利亚森林猫 Mable 母版，以较大的圆眼和柔和面罩呈现友善卡通表情
 - Leo 的待机呼吸、偶发摆动、键盘、鼠标和点击反应
+- 数据驱动的多帧宠物行为资源：支持随机待机、点击、键盘、鼠标、Focus
+  和 Reminder 触发，以及帧速、播放方式、权重与冷却
+- 标准 `desktop_pet_behavior_v1` 生成规范和自动校验；旧单图宠物包继续
+  安全回退
+- Leo 已接入首个试产行为 `idle_blink`：空闲时自动使用现有睁眼待机图
+  和一张新闭眼帧完成自然眨眼
+- Leo 的 `click_happy` 在左键点击时切换为开心笑脸并配合轻微跳起与爱心，
+  笑容保持约 1 秒后自动回到待机状态；跳起和爱心仍保持短促
+- Leo 的 `focus_calm` 在 Focus 期间持续使用安静清醒的专注姿态：先保持
+  5 秒平静睁眼，再用 1 秒完成一次缓慢半眨眼，随后无缝循环；结束 Focus
+  后恢复普通待机
+- Leo 的 `reminder_attention` 在 Focus/Break 完成或健康提醒出现时切换为
+  温和前倾、轻抬前爪的注意姿势，并与待机帧低频往返约 2.4 秒；提醒结束后
+  自动恢复此前状态
+- Leo 的 `keyboard` 在检测到匿名聚合键盘活动时，以 6 FPS 交替轻点左右
+  前爪约 0.5 秒；持续输入只延长动作而不重置到第一帧，Focus 期间播放后
+  会自动回到 `focus_calm`
+- Leo 的 `mouse` 在检测到匿名聚合鼠标按钮活动时，以 4 FPS 在两个好奇
+  侧头姿势间切换约 0.5 秒；它不读取或追踪鼠标坐标，持续点击只延长当前
+  动作，Focus 期间结束后恢复 `focus_calm`
+- Leo 已完成 `desktop_pet_behavior_v1` 的六项核心行为，并通过完整档案、
+  画布尺寸、帧数和独立贴图预算校验
+- 可复用接触表工具把任意完整宠物包的运行时关键帧同时放在浅色与深色背景
+  上检查；Leo 的接触表保存在 `assets/pets/leo/authoring/behavior-contact-sheet.png`
+- 编辑器环境的 `Developer > Behavior preview… / 开发测试 > 动作预览…`
+  会打开非模态双语窗口，逐项触发当前宠物的六项核心行为；缺失动作的按钮
+  自动禁用，窗口和文字随宠物显示比例缩放
 - 自动发现 `assets/pets/*/pet.tres` 宠物包
 - 右键菜单切换宠物，并在重启后恢复选择
 - 宠物可以分别配置尺寸、点击轮廓回退、动作替代图和点击特效；运行时优先根据 PNG alpha 自动生成贴合轮廓
@@ -230,8 +257,12 @@ platform/windows/credential_helper/DesktopPetCredentialHelper.exe
 platform/windows/export_release.ps1
                                   注入 OAuth 配置并导出正式 Windows EXE
 src/pets/pet_definition.gd        宠物资源格式
+src/pets/pet_behavior_definition.gd
+                                  通用多帧行为、触发、播放与选择参数
+src/pets/pet_behavior_profile.gd  版本一标准行为清单与资源预算校验
 src/pets/pet_registry.gd          自动发现、校验和排序宠物包
-src/pets/pet_visual.gd            所有宠物共用的显示与基础动作
+src/pets/pet_visual.gd            所有宠物共用的显示、行为调度与安全回退
+docs/宠物行为生成流程.md           照片到标准行为包的版本化生产流程
 assets/pets/leo/pet.tres          Leo 的宠物定义
 assets/pets/leo/leo-master.png    Leo 的透明背景母版
 assets/pets/bobo/pet.tres         Bobo 的宠物定义
@@ -254,6 +285,7 @@ tests/activity_center_integration_test.gd
                                   活动中心状态、精确操作、入口、缩放与本地化集成自测
 tests/activity_center_session_log_test.gd
                                   会话事件白名单、5 条上限、深拷贝与清除自测
+tests/pet_behavior_system_test.gd 多帧播放、标准档案、优先级、Focus 与回退自测
 tests/localization_test.gd         本地化目录完整性、语言回退与格式化自测
 tests/check_in_manager_test.gd     小纸条队列、过期与日历触发规则自测
 tests/ambient_card_integration_test.gd
@@ -279,10 +311,12 @@ tests/google_oauth_packaged_config_test.gd
 1. 在 `assets/pets` 下创建以宠物 ID 命名的文件夹。
 2. 放入透明 PNG 素材。
 3. 创建 `pet.tres`，填写 `pet_id`、`display_name`、`idle_texture`、显示尺寸和点击轮廓。
-4. 可选加入 `click_texture`、`keyboard_texture` 和 `mouse_texture`；没有提供的动作会使用 `idle_texture`。
+4. 新行为包按 `desktop_pet_behavior_v1` 加入多帧行为资源；旧包仍可使用
+   `click_texture`、`keyboard_texture` 和 `mouse_texture`。
 5. 重新打开或运行项目，宠物会自动出现在右键菜单中。
 
-完整字段和验收要求见 `docs/宠物资源包规范.md`。
+完整字段和验收要求见 `docs/宠物资源包规范.md`；从照片生成身份母版、
+动作帧、接触表和运行时包的流程见 `docs/宠物行为生成流程.md`。
 
 ## 导出带 Google Calendar 的 Windows 版本
 
@@ -295,7 +329,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\platform\windows\export_release.ps1
 ```
 
-脚本会校验固定 client ID，通过进程环境把 client 配置交给 Godot 导出插件，并清理后重建 `dist\DesktopPet-Windows` 中的 `DesktopPet.exe`、`DesktopPetActivityHelper.exe`、`DesktopPetCredentialHelper.exe` 和 `DesktopPetTaskbarHelper.exe`。四个 EXE 必须一起分发并放在同一目录。测试 PCK 位于独立的 `dist\tests`，不会混入正式包。原始 JSON 不会进入发行包；插件只加入运行所需的规范化 `client_id` 与 `client_secret`。CI 可改用 `DESKTOP_PET_GOOGLE_CLIENT_ID` 和 `DESKTOP_PET_GOOGLE_CLIENT_SECRET` 两个受保护环境变量，不需要创建 JSON。
+脚本会校验固定 client ID，通过进程环境把 client 配置交给 Godot 导出插件，并清理后重建 `dist\DesktopPet-Windows` 中的 `DesktopPet.exe`、`DesktopPetActivityHelper.exe`、`DesktopPetCredentialHelper.exe` 和 `DesktopPetTaskbarHelper.exe`。四个 EXE 必须一起分发并放在同一目录。每次导出还会先删除旧的 `dist\DesktopPet-Windows.zip`，再把完整输出目录重新压缩为同名 ZIP，供复制和分发。测试 PCK 位于独立的 `dist\tests`，不会混入正式包。原始 JSON 不会进入发行包；插件只加入运行所需的规范化 `client_id` 与 `client_secret`。CI 可改用 `DESKTOP_PET_GOOGLE_CLIENT_ID` 和 `DESKTOP_PET_GOOGLE_CLIENT_SECRET` 两个受保护环境变量，不需要创建 JSON。
 
 如果发行配置缺失或 client ID 不匹配，应用会在打开浏览器前显示配置错误。不要把 Desktop client secret 当作用户数据或访问令牌：它随 Installed 应用分发且可被提取；真正能访问个人日历的是每位用户授权后生成并保存于其 Windows 凭据管理器中的 refresh token。
 

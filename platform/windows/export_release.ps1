@@ -92,6 +92,12 @@ foreach ($helperPath in $helperPaths) {
     }
 }
 $outputDirectory = Split-Path -Parent $OutputPath
+$archivePath = Join-Path (
+    Split-Path -Parent $outputDirectory
+) ((Split-Path -Leaf $outputDirectory) + ".zip")
+if (Test-Path -LiteralPath $archivePath -PathType Leaf) {
+    Remove-Item -LiteralPath $archivePath -Force
+}
 if (-not (Test-Path -LiteralPath $outputDirectory)) {
     New-Item -ItemType Directory -Path $outputDirectory | Out-Null
 }
@@ -142,4 +148,9 @@ foreach ($helperPath in $helperPaths) {
     Copy-Item -LiteralPath $helperPath -Destination $outputDirectory -Force
 }
 
+Compress-Archive -LiteralPath $outputDirectory `
+    -DestinationPath $archivePath `
+    -CompressionLevel Optimal
+
 Write-Host "Windows release exported to $outputDirectory"
+Write-Host "Windows release archive created at $archivePath"

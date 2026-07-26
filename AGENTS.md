@@ -19,6 +19,16 @@
 - 早期金黄色巴哥犬 Leo 原型已完整保留为第三只宠物 **Milo**，完整宠物包位于 `assets/pets/milo`。
 - 第四只宠物 **Mable** 是西伯利亚森林猫，以用户提供的多张真实照片为原型，保留冰蓝眼睛、灰色面罩与耳朵、奶油白长毛、白手套和灰色蓬松尾巴；眼睛采用较大、较圆的卡通比例，眉间与面罩柔化以呈现安静友善而非严厉的表情；完整宠物包位于 `assets/pets/mable`。
 - 多宠物系统采用数据驱动结构：`PetRegistry` 自动发现 `assets/pets/*/pet.tres`，`PetVisual` 提供通用表现与动作回退。
+- 宠物行为系统第一阶段采用 `desktop_pet_behavior_v1`：通用行为资源支持随机待机、点击、键盘、鼠标、Focus 和 Reminder 多帧动画，以及帧速、播放方式、权重和冷却；运行时固定 Reminder > Click > Keyboard/Mouse > Random Idle 优先级。现有单图宠物包继续安全回退。照片到宠物包的标准流程记录在 `docs/宠物行为生成流程.md`。
+- Leo 已完成首个试产行为 `idle_blink`：行为帧序列复用待机图作为睁眼首尾帧，只新增一张身份对齐的透明闭眼帧；空闲且非 Focus 时按 4–8 秒随机间隔自动触发。
+- Leo 已完成 `click_happy`：左键点击时从待机切换到开心帧，并叠加短促的轻微跳起与爱心；笑容保持约 1 秒后恢复。
+- Leo 已完成 `focus_calm`：进入 Focus 后使用 5 秒平静睁眼加 1 秒缓慢半眨眼的低频循环，保持清醒安静；Focus 结束后恢复普通待机。
+- Leo 已完成 `reminder_attention`：Focus/Break 完成或健康提醒出现时，以待机帧和温和前倾、轻抬前爪的注意帧低频往返约 2.4 秒；该高优先级动作允许覆盖 Focus，结束后恢复此前状态。
+- Leo 已完成 `keyboard`：匿名聚合键盘活动触发 6 FPS 的左右前爪交替轻点，停止输入约 0.5 秒后恢复；连续批次只延长而不重置动画，Focus 期间允许短暂覆盖并回到 `focus_calm`。
+- Leo 已完成 `mouse`：匿名聚合鼠标按钮活动触发 4 FPS 的双向好奇侧头，约 0.5 秒后恢复；不读取鼠标坐标，连续批次只延长而不重置动画，Focus 期间允许短暂覆盖并回到 `focus_calm`。
+- Leo 已完成 `desktop_pet_behavior_v1` 六项核心行为并通过完整档案、统一画布、帧数与独立贴图预算校验。
+- 可复用接触表工具 `tools/generate_behavior_contact_sheet.py` 会从宠物包运行时素材生成浅色/深色双背景接触表；Leo 当前输出位于 `assets/pets/leo/authoring/behavior-contact-sheet.png`，不会进入 Godot 导入或正式发行包。
+- 编辑器环境的 Developer 菜单提供单一 `Behavior preview… / 动作预览…` 入口，打开非模态双语窗口逐项预览六项核心行为；缺失行为自动禁用，窗口按宠物显示比例和屏幕可用区域缩放。
 - 0.1B Windows 活动桥接已完成：独立 Raw Input helper、匿名活动批次、会话统计、100ms 聚合节流、暂停/清除和内部自动化测试。
 - 用户已完成真实键鼠输入实机验收。
 - 番茄钟第一阶段已完成：25 分钟专注、5 分钟休息、暂停/继续/取消、真实时间恢复、完成气泡、菜单实时倒计时、等待下一阶段状态、专注完成后 5 秒自动休息，以及仅开发环境可见的专注/休息 1 秒测试入口。
@@ -33,9 +43,9 @@
 - Windows 系统托盘第一阶段已完成：托盘菜单支持显示/隐藏宠物、开始专注、打开 Pet Notes 和退出；完整活动托盘仍是后续功能。
 - 主宠物窗口当前不得启用 `no_focus`、`unfocusable` 或运行时 `WS_EX_TOOLWINDOW`。实机验证表明这些样式会造成右键卡死、左键失效或透明窗口只剩浅色矩形。
 - 任务栏按钮通过独立 helper 调用 Windows Shell `ITaskbarList::DeleteTab(HWND)` 隐藏；helper 只修改 Shell 的任务栏列表，不得调用 `SetWindowLongPtr`、`ShowWindow` 或修改窗口所有权。此方案不负责隐藏 Alt+Tab。
-- Windows 正式导出会把已校验的 Desktop OAuth 配置注入 PCK，并将主程序、活动监听、凭据管理和任务栏隐藏四个 EXE 生成到 `dist/DesktopPet-Windows`；普通用户不需要 `.tools` 或本地 OAuth JSON。
+- Windows 正式导出会把已校验的 Desktop OAuth 配置注入 PCK，并将主程序、活动监听、凭据管理和任务栏隐藏四个 EXE 生成到 `dist/DesktopPet-Windows`；随后删除旧的 `dist/DesktopPet-Windows.zip` 并把完整输出目录重新压缩为同名 ZIP。普通用户不需要 `.tools` 或本地 OAuth JSON。
 - 宠物显示比例支持 75%、100%、125%、150%、200%、250% 和 300%，Godot 右键菜单字体、行距、留白与图标尺寸同步调整；Windows 原生托盘菜单仍由系统 DPI 控制。
-- 下一步是用户在另一台 PC 实机验收发行包 Google Calendar 登录、重启自动恢复、主动断连和 AMD 透明窗口。随后实现统一待处理活动列表。
+- Activity Center 三阶段及另一台 PC 的主要发行包验收已完成。Leo 的完整行为接触表和统一预览入口已完成；下一步进行实机节奏、深浅桌面边缘和 75%–300% 缩放验收，确认流程后再按同一标准扩展其余宠物。
 - 键鼠活动未来可以作为奖励和掉落的输入信号，但当前阶段只计数；奖励层不得直接依赖原始输入事件或按次数 1:1 发放高价值资源。
 - 正式菜单不显示模拟键鼠入口；模拟批次只保留在自动化测试中。
 - 普通源码改动后不重复导出 EXE；仅在需要最新 EXE 实机验收，或执行 Git push/merge 发布流程时清理并重新导出正式包。

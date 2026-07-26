@@ -13,6 +13,7 @@ extends Resource
 @export var click_texture: Texture2D
 @export var keyboard_texture: Texture2D
 @export var mouse_texture: Texture2D
+@export var behaviors: Array[PetBehaviorDefinition] = []
 @export var display_size := Vector2(224, 224)
 @export var visual_offset := Vector2.ZERO
 
@@ -67,3 +68,76 @@ func texture_for_action(action: StringName) -> Texture2D:
 			return mouse_texture if mouse_texture != null else idle_texture
 		_:
 			return idle_texture
+
+
+func behavior_by_id(behavior_id: StringName) -> PetBehaviorDefinition:
+	for behavior in behaviors:
+		if (
+			behavior != null
+			and behavior.behavior_id == behavior_id
+			and behavior.is_configured()
+		):
+			return behavior
+	return null
+
+
+func behaviors_for_trigger(
+	trigger: PetBehaviorDefinition.Trigger
+) -> Array[PetBehaviorDefinition]:
+	var matches: Array[PetBehaviorDefinition] = []
+	var seen_ids: Dictionary = {}
+	for behavior in behaviors:
+		if (
+			behavior == null
+			or not behavior.is_configured()
+			or behavior.trigger != trigger
+			or seen_ids.has(behavior.behavior_id)
+		):
+			continue
+		seen_ids[behavior.behavior_id] = true
+		matches.append(behavior)
+	return matches
+
+
+func behavior_validation_errors() -> PackedStringArray:
+	var errors := PackedStringArray()
+	var seen_ids: Dictionary = {}
+	for index in behaviors.size():
+		var behavior := behaviors[index]
+		if behavior == null:
+			errors.append("Behavior %d is empty." % index)
+			continue
+		if not behavior.is_configured():
+			errors.append(
+				"Behavior %d (%s) is incomplete."
+				% [index, behavior.behavior_id]
+			)
+			continue
+		if seen_ids.has(behavior.behavior_id):
+			errors.append(
+				"Duplicate behavior id: %s" % behavior.behavior_id
+			)
+			continue
+		seen_ids[behavior.behavior_id] = true
+		if idle_texture == null:
+			continue
+		for frame_index in behavior.frames.size():
+			var frame := behavior.frames[frame_index]
+			if (
+				frame.get_width() != idle_texture.get_width()
+				or frame.get_height() != idle_texture.get_height()
+			):
+				errors.append(
+					(
+						"Behavior %s frame %d is %dx%d; expected %dx%d."
+					)
+					% [
+						behavior.behavior_id,
+						frame_index,
+						frame.get_width(),
+						frame.get_height(),
+						idle_texture.get_width(),
+						idle_texture.get_height(),
+					]
+				)
+	return errors
