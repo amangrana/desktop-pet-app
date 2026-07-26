@@ -1,6 +1,8 @@
 class_name PetVisual
 extends Node2D
 
+signal visual_shape_changed
+
 const INTERACTION_ALPHA_THRESHOLD := 0.08
 const INTERACTION_SAFETY_MARGIN := 16.0
 const INTERACTION_SIMPLIFY_EPSILON := 2.0
@@ -36,6 +38,7 @@ var _focus_mode := false
 var _focus_behavior_elapsed := 0.0
 var _visible_bounds := Rect2()
 var _interaction_polygon := PackedVector2Array()
+var _interaction_texture: Texture2D
 
 
 func _ready() -> void:
@@ -83,6 +86,7 @@ func _process(delta: float) -> void:
 				_alternate_side = not _alternate_side
 			_schedule_idle_motion()
 
+	_refresh_interaction_shape()
 	queue_redraw()
 
 
@@ -98,24 +102,10 @@ func _draw() -> void:
 	var draw_position := definition.visual_offset + Vector2(0, bob)
 	var draw_rotation := 0.0
 	var draw_scale := Vector2(breathing, breathing)
-	var action := &"idle"
-	var draw_texture := definition.idle_texture
+	var draw_texture := _current_visual_texture()
 	var configured_behavior := _configured_behavior_for_draw()
 
 	if configured_behavior != null:
-		var behavior_elapsed := (
-			_active_behavior_elapsed
-			if configured_behavior == _active_behavior
-			else _focus_behavior_elapsed
-		)
-		var behavior_texture := configured_behavior.texture_at(
-			behavior_elapsed
-		)
-		if behavior_texture != null:
-			draw_texture = behavior_texture
-
-	if configured_behavior != null:
-		action = configured_behavior.behavior_id
 		if (
 			configured_behavior.trigger
 			== PetBehaviorDefinition.Trigger.CLICK
@@ -136,35 +126,27 @@ func _draw() -> void:
 				)
 			draw_scale *= Vector2(1.02, 1.02)
 	elif _reaction == Reaction.KEYBOARD:
-		action = &"keyboard"
 		draw_position.y -= definition.keyboard_lift
 		draw_rotation = 0.045 if _alternate_side else -0.045
 		draw_scale = Vector2(1.02, 0.98)
 	elif _reaction == Reaction.MOUSE:
-		action = &"mouse"
 		draw_position.y += definition.mouse_drop
 		draw_scale = Vector2(1.04, 0.92)
 	elif _reaction == Reaction.CLICK:
-		action = &"click"
 		draw_position.y -= definition.click_jump
 		draw_scale = Vector2(1.025, 1.025)
 	elif _reaction == Reaction.REMINDER:
-		action = &"reminder"
 		draw_position.y -= definition.click_jump * 0.45
 		var reminder_pulse := 1.04 + sin(_elapsed * 8.0) * 0.02
 		draw_scale = Vector2(reminder_pulse, reminder_pulse)
-	elif _focus_mode:
-		action = &"focus"
-	elif _idle_motion_remaining > 0.0:
+	elif not _focus_mode and _idle_motion_remaining > 0.0:
 		var idle_progress := float(_idle_motion_remaining / 0.45)
 		var direction := 1.0 if _alternate_side else -1.0
 		draw_rotation = sin(idle_progress * PI) * 0.025 * direction
 
 	draw_set_transform(draw_position, draw_rotation, draw_scale)
 	draw_texture_rect(
-		draw_texture if configured_behavior != null else (
-			definition.texture_for_action(action)
-		),
+		draw_texture,
 		Rect2(-definition.display_size / 2.0, definition.display_size),
 		false
 	)
@@ -181,7 +163,8 @@ func _draw() -> void:
 func set_definition(value: PetDefinition) -> void:
 	definition = value
 	_visible_bounds = _calculate_visible_bounds()
-	_interaction_polygon = _calculate_interaction_polygon()
+	_interaction_texture = null
+	_interaction_polygon = PackedVector2Array()
 	_reaction = Reaction.NONE
 	_reaction_remaining = 0.0
 	_click_effect_remaining = 0.0
@@ -190,6 +173,7 @@ func set_definition(value: PetDefinition) -> void:
 	_behavior_cooldowns.clear()
 	_focus_behavior_elapsed = 0.0
 	_schedule_idle_motion()
+	_refresh_interaction_shape()
 	queue_redraw()
 
 
@@ -271,6 +255,7 @@ func preview_behavior(
 			0.8,
 			_active_behavior_remaining
 		)
+	_refresh_interaction_shape()
 	queue_redraw()
 	return true
 
@@ -322,6 +307,7 @@ func react_to_keyboard(event_count: int = 1) -> void:
 	_reaction = Reaction.KEYBOARD
 	_reaction_remaining = clampf(0.18 + event_count * 0.02, 0.18, 0.42)
 	_alternate_side = not _alternate_side
+	_refresh_interaction_shape()
 
 
 func react_to_mouse(event_count: int = 1) -> void:
@@ -336,6 +322,7 @@ func react_to_mouse(event_count: int = 1) -> void:
 		return
 	_reaction = Reaction.MOUSE
 	_reaction_remaining = clampf(0.20 + event_count * 0.025, 0.20, 0.48)
+	_refresh_interaction_shape()
 
 
 func react_to_click() -> void:
@@ -351,6 +338,7 @@ func react_to_click() -> void:
 		return
 	_reaction = Reaction.CLICK
 	_reaction_remaining = 0.8
+	_refresh_interaction_shape()
 
 
 func react_to_reminder() -> void:
@@ -364,6 +352,7 @@ func react_to_reminder() -> void:
 	_clear_active_behavior()
 	_reaction = Reaction.REMINDER
 	_reaction_remaining = 2.4
+	_refresh_interaction_shape()
 
 
 func set_focus_mode(enabled: bool) -> void:
@@ -382,6 +371,7 @@ func set_focus_mode(enabled: bool) -> void:
 		_clear_active_behavior()
 	if not enabled:
 		_schedule_idle_motion()
+	_refresh_interaction_shape()
 	queue_redraw()
 
 
@@ -393,6 +383,44 @@ func _configured_behavior_for_draw() -> PetBehaviorDefinition:
 			PetBehaviorDefinition.Trigger.FOCUS
 		)
 	return null
+
+
+func _current_visual_texture() -> Texture2D:
+	if definition == null or definition.idle_texture == null:
+		return null
+	var configured_behavior := _configured_behavior_for_draw()
+	if configured_behavior != null:
+		var behavior_elapsed := (
+			_active_behavior_elapsed
+			if configured_behavior == _active_behavior
+			else _focus_behavior_elapsed
+		)
+		var behavior_texture := configured_behavior.texture_at(
+			behavior_elapsed
+		)
+		if behavior_texture != null:
+			return behavior_texture
+
+	var action := &"idle"
+	match _reaction:
+		Reaction.KEYBOARD:
+			action = &"keyboard"
+		Reaction.MOUSE:
+			action = &"mouse"
+		Reaction.CLICK:
+			action = &"click"
+		Reaction.REMINDER:
+			action = &"reminder"
+	return definition.texture_for_action(action)
+
+
+func _refresh_interaction_shape() -> void:
+	var texture := _current_visual_texture()
+	if texture == _interaction_texture:
+		return
+	_interaction_texture = texture
+	_interaction_polygon = _calculate_interaction_polygon(texture)
+	visual_shape_changed.emit()
 
 
 func _first_behavior_for_trigger(
@@ -456,6 +484,7 @@ func _start_trigger_behavior(
 		_behavior_cooldowns[behavior.behavior_id] = (
 			behavior.cooldown_seconds
 		)
+	_refresh_interaction_shape()
 	return true
 
 
@@ -589,10 +618,16 @@ func _calculate_visible_bounds() -> Rect2:
 	)
 
 
-func _calculate_interaction_polygon() -> PackedVector2Array:
-	if definition == null or definition.idle_texture == null:
+func _calculate_interaction_polygon(
+	source_texture: Texture2D = null
+) -> PackedVector2Array:
+	if definition == null:
 		return PackedVector2Array()
-	var image: Image = definition.idle_texture.get_image()
+	if source_texture == null:
+		source_texture = definition.idle_texture
+	if source_texture == null:
+		return PackedVector2Array()
+	var image: Image = source_texture.get_image()
 	if image == null or image.is_empty():
 		return PackedVector2Array()
 
