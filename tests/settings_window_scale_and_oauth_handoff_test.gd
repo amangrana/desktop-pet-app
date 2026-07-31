@@ -67,7 +67,7 @@ func _run() -> void:
 	await _expect_scaled_window(
 		main,
 		main.pet_notes_settings_window,
-		Vector2i(420, 310),
+		Vector2i(440, 515),
 		main._open_pet_notes_settings,
 		"Pet Notes settings"
 	)

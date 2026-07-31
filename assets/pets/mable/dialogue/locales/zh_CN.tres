@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="PetDialogueLocale" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_locale.gd" id="1_locale"]
+
+[resource]
+script = ExtResource("1_locale")
+locale_code = "zh_CN"
+translations = {
+"mable.click.01": "你来啦，再陪我一会儿吧。",
+"mable.click.02": "我还在想你什么时候会来看看我。",
+"mable.click.03": "可以继续，我其实很喜欢。",
+"mable.click.04": "这个位置是特意给你留的。",
+"mable.focus_start.01": "开始吧，我会坐在这里陪着你。",
+"mable.focus_start.02": "你专心的时候，我们一起安静一会儿。",
+"mable.focus_complete.01": "完成了吗？来和我一起休息吧。",
+"mable.focus_complete.02": "你刚才很专心，我为你开心。",
+"mable.reminder_done.01": "很好，现在可以回来陪我啦。",
+"mable.reminder_done.02": "这样好多了，我希望你舒服一点。",
+"mable.idle.01": "我有点好奇你在那边做什么。",
+"mable.idle.02": "安静一点也没关系，只要你还在这里。",
+"mable.idle.03": "如果你需要我，我已经在旁边了。"
+}

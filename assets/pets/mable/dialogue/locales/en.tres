@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="PetDialogueLocale" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_locale.gd" id="1_locale"]
+
+[resource]
+script = ExtResource("1_locale")
+locale_code = "en"
+translations = {
+"mable.click.01": "Oh, there you are. Stay a moment.",
+"mable.click.02": "I was wondering when you'd visit.",
+"mable.click.03": "You may continue. I quite like this.",
+"mable.click.04": "I saved this spot for you.",
+"mable.focus_start.01": "Go on. I'll sit right here with you.",
+"mable.focus_start.02": "Let's be quiet together while you focus.",
+"mable.focus_complete.01": "All done? Come rest with me.",
+"mable.focus_complete.02": "You focused so well. I'm proud of you.",
+"mable.reminder_done.01": "Good. Now come sit with me again.",
+"mable.reminder_done.02": "That's better. I want you feeling well.",
+"mable.idle.01": "I wonder what you're doing over there.",
+"mable.idle.02": "It's quiet. I don't mind, as long as you're here.",
+"mable.idle.03": "If you need me, I'm already nearby."
+}

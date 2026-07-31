@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="PetDialogueLocale" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_locale.gd" id="1_locale"]
+
+[resource]
+script = ExtResource("1_locale")
+locale_code = "en"
+translations = {
+"leo.click.01": "Hi. I was hoping you'd stop by.",
+"leo.click.02": "A little attention? I won't complain.",
+"leo.click.03": "I'm right here.",
+"leo.click.04": "That was nice.",
+"leo.focus_start.01": "I'll keep watch. Take it slowly.",
+"leo.focus_start.02": "Settle in. I'll stay nearby.",
+"leo.focus_complete.01": "You did it. Take a breath.",
+"leo.focus_complete.02": "That was solid work.",
+"leo.reminder_done.01": "Good. Small things matter too.",
+"leo.reminder_done.02": "Nicely done. Take care.",
+"leo.idle.01": "I'm glad to be here with you.",
+"leo.idle.02": "No rush. I'm right here.",
+"leo.idle.03": "Quiet moments suit us."
+}

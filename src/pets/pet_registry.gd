@@ -39,6 +39,11 @@ static func discover() -> Array[PetDefinition]:
 				"Optional pet behavior ignored in %s: %s"
 				% [definition_path, error]
 			)
+		for error in definition.dialogue_validation_errors():
+			push_warning(
+				"Optional pet dialogue ignored in %s: %s"
+				% [definition_path, error]
+			)
 
 		seen_ids[definition.pet_id] = true
 		definitions.append(definition)

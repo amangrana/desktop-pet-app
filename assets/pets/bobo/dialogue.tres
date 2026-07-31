@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="PetDialogueProfile" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_profile.gd" id="1_profile"]
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_entry.gd" id="2_entry"]
+
+[sub_resource type="Resource" id="Dialogue_click"]
+script = ExtResource("2_entry")
+context = &"click"
+line_ids = Array[StringName]([&"bobo.click.01", &"bobo.click.02", &"bobo.click.03", &"bobo.click.04"])
+cooldown_seconds = 8.0
+
+[sub_resource type="Resource" id="Dialogue_focus_start"]
+script = ExtResource("2_entry")
+context = &"focus_start"
+line_ids = Array[StringName]([&"bobo.focus_start.01", &"bobo.focus_start.02"])
+cooldown_seconds = 20.0
+
+[sub_resource type="Resource" id="Dialogue_focus_complete"]
+script = ExtResource("2_entry")
+context = &"focus_complete"
+line_ids = Array[StringName]([&"bobo.focus_complete.01", &"bobo.focus_complete.02"])
+cooldown_seconds = 30.0
+
+[sub_resource type="Resource" id="Dialogue_reminder_done"]
+script = ExtResource("2_entry")
+context = &"reminder_done"
+line_ids = Array[StringName]([&"bobo.reminder_done.01", &"bobo.reminder_done.02"])
+cooldown_seconds = 30.0
+
+[sub_resource type="Resource" id="Dialogue_idle"]
+script = ExtResource("2_entry")
+context = &"idle"
+line_ids = Array[StringName]([&"bobo.idle.01", &"bobo.idle.02", &"bobo.idle.03"])
+cooldown_seconds = 240.0
+
+[resource]
+script = ExtResource("1_profile")
+global_cooldown_seconds = 8.0
+idle_interval_min_seconds = 300.0
+idle_interval_max_seconds = 480.0
+entries = Array[ExtResource("2_entry")]([SubResource("Dialogue_click"), SubResource("Dialogue_focus_start"), SubResource("Dialogue_focus_complete"), SubResource("Dialogue_reminder_done"), SubResource("Dialogue_idle")])

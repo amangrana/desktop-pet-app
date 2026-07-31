@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="PetDialogueLocale" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_locale.gd" id="1_locale"]
+
+[resource]
+script = ExtResource("1_locale")
+locale_code = "zh_CN"
+translations = {
+"leo.click.01": "嗨，我正等你来看看我。",
+"leo.click.02": "再摸一下也可以。",
+"leo.click.03": "我一直在这里。",
+"leo.click.04": "这样很好。",
+"leo.focus_start.01": "我帮你守着，慢慢来。",
+"leo.focus_start.02": "安心开始吧，我就在旁边。",
+"leo.focus_complete.01": "完成啦，先松口气。",
+"leo.focus_complete.02": "做得很稳，休息一下吧。",
+"leo.reminder_done.01": "很好，小事也值得认真照顾。",
+"leo.reminder_done.02": "做得好，也要照顾好自己。",
+"leo.idle.01": "这样安静地陪着你，我就很开心。",
+"leo.idle.02": "不用着急，我会待在这里。",
+"leo.idle.03": "安静一会儿也很好。"
+}

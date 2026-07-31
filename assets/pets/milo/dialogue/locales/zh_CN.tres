@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="PetDialogueLocale" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_locale.gd" id="1_locale"]
+
+[resource]
+script = ExtResource("1_locale")
+locale_code = "zh_CN"
+translations = {
+"milo.click.01": "嗨！已经到玩耍时间了吗？",
+"milo.click.02": "你回来啦！我就知道你会回来。",
+"milo.click.03": "再摸一下？要不两下？",
+"milo.click.04": "你好！我刚才一直很有耐心。",
+"milo.focus_start.01": "开始吧！我会安静地给你加油。",
+"milo.focus_start.02": "你专心，我来守着零食。",
+"milo.focus_complete.01": "完成啦！这值得小小庆祝一下。",
+"milo.focus_complete.02": "做得好！现在可以休息啦。",
+"milo.reminder_done.01": "漂亮！任务完成。",
+"milo.reminder_done.02": "做得好！小胜利，大摇尾巴。",
+"milo.idle.01": "你觉得是不是快到零食时间了？",
+"milo.idle.02": "你一叫我，我就准备好啦！",
+"milo.idle.03": "我刚才坐得特别安静，你发现了吗？"
+}

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="PetDialogueLocale" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_locale.gd" id="1_locale"]
+
+[resource]
+script = ExtResource("1_locale")
+locale_code = "en"
+translations = {
+"bobo.click.01": "Oh, hello. I'm glad you came by.",
+"bobo.click.02": "A gentle touch is always welcome.",
+"bobo.click.03": "You found me. I was resting nearby.",
+"bobo.click.04": "I can make a little room for you.",
+"bobo.focus_start.01": "Take your time. I'll keep things calm.",
+"bobo.focus_start.02": "I'll be quiet beside you.",
+"bobo.focus_complete.01": "Well done. Rest while it's quiet.",
+"bobo.focus_complete.02": "You handled that beautifully. Now rest.",
+"bobo.reminder_done.01": "Good. A little care goes a long way.",
+"bobo.reminder_done.02": "Much better. Keep looking after yourself.",
+"bobo.idle.01": "The room feels peaceful today.",
+"bobo.idle.02": "I'm listening, even when I look asleep.",
+"bobo.idle.03": "We can simply be quiet together."
+}
