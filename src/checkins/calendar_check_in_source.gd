@@ -1,15 +1,20 @@
 class_name CalendarCheckInSource
-extends Node
+extends "res://src/checkins/pet_note_source.gd"
 
 signal event_ready(event_data: Dictionary)
 
 const DEFAULT_LEAD_SECONDS := 60 * 60
+const SOURCE_ID := "calendar"
 
 var time_source := Callable()
 var lead_seconds := DEFAULT_LEAD_SECONDS
 
 var _events: Array[Dictionary] = []
 var _emitted_ids: Dictionary = {}
+
+
+func _init() -> void:
+	super(SOURCE_ID)
 
 
 func replace_events(events: Array[Dictionary]) -> void:
@@ -47,6 +52,28 @@ func poll() -> void:
 		var ready_event: Dictionary = event_data.duplicate(true)
 		ready_event["expires_unix"] = expires_unix
 		event_ready.emit(ready_event)
+		var card := {
+			"id": "calendar:%s" % event_id,
+			"title": title,
+			"display_seconds": 10,
+			"expires_unix": expires_unix,
+			"metadata": {
+				"event_id": event_id,
+				"start_unix": start_unix,
+				"end_unix": end_unix,
+				"is_all_day": is_all_day,
+			},
+		}
+		if is_all_day:
+			card["message_key"] = "calendar_all_day_card"
+			card["format_args"] = [title]
+		else:
+			card["message_key"] = "calendar_event_card"
+			card["format_args"] = [
+				title,
+				maxi(1, ceili((start_unix - now) / 60.0)),
+			]
+		publish_card(card)
 
 
 func _now() -> float:

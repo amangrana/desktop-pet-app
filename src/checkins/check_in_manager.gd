@@ -3,10 +3,16 @@ extends Node
 
 signal changed
 
-const DEFAULT_DISPLAY_SECONDS := 10
+const PetNoteCardScript := preload(
+	"res://src/checkins/pet_note_card.gd"
+)
+
+const DEFAULT_DISPLAY_SECONDS := (
+	PetNoteCardScript.DEFAULT_DISPLAY_SECONDS
+)
 const DEFAULT_COOLDOWN_SECONDS := 60 * 60
-const MIN_DISPLAY_SECONDS := 5
-const MAX_DISPLAY_SECONDS := 30
+const MIN_DISPLAY_SECONDS := PetNoteCardScript.MIN_DISPLAY_SECONDS
+const MAX_DISPLAY_SECONDS := PetNoteCardScript.MAX_DISPLAY_SECONDS
 
 var time_source := Callable()
 
@@ -15,6 +21,7 @@ var _cooldown_seconds := DEFAULT_COOLDOWN_SECONDS
 var _next_allowed_unix := 0.0
 var _pending_cards: Array[Dictionary] = []
 var _seen_ids: Dictionary = {}
+var _queue_sequence := 0
 
 
 func set_enabled(enabled: bool) -> bool:
@@ -47,11 +54,22 @@ func enqueue_card(
 	display_seconds := DEFAULT_DISPLAY_SECONDS,
 	expires_unix := 0.0
 ) -> bool:
+	return enqueue_card_data({
+		"id": card_id,
+		"source": source,
+		"message": message,
+		"display_seconds": display_seconds,
+		"expires_unix": expires_unix,
+	})
+
+
+func enqueue_card_data(data: Dictionary) -> bool:
 	_prune_expired()
-	var safe_id := card_id.strip_edges()
-	var safe_message := message.strip_edges()
-	if safe_id.is_empty() or safe_message.is_empty():
+	var card := PetNoteCardScript.normalize(data)
+	if card.is_empty():
 		return false
+	var safe_id := str(card.get("id", ""))
+	var expires_unix := float(card.get("expires_unix", 0.0))
 	if expires_unix > 0.0 and expires_unix <= _now():
 		return false
 	if _seen_ids.has(safe_id):
@@ -59,17 +77,10 @@ func enqueue_card(
 	for pending_card in _pending_cards:
 		if str(pending_card.get("id", "")) == safe_id:
 			return false
-	_pending_cards.append({
-		"id": safe_id,
-		"source": source,
-		"message": safe_message,
-		"display_seconds": clampi(
-			display_seconds,
-			MIN_DISPLAY_SECONDS,
-			MAX_DISPLAY_SECONDS
-		),
-		"expires_unix": expires_unix,
-	})
+	_queue_sequence += 1
+	card["_queue_sequence"] = _queue_sequence
+	_pending_cards.append(card)
+	_pending_cards.sort_custom(_card_precedes)
 	changed.emit()
 	return true
 
@@ -79,19 +90,26 @@ func has_pending() -> bool:
 	return not _pending_cards.is_empty()
 
 
-func take_next() -> Dictionary:
+func take_next(
+	ignore_cooldown := false,
+	apply_cooldown := true
+) -> Dictionary:
 	_prune_expired()
 	if (
 		not _enabled
 		or _pending_cards.is_empty()
-		or _now() < _next_allowed_unix
+		or (
+			not ignore_cooldown
+			and _now() < _next_allowed_unix
+		)
 	):
 		return {}
 	var card: Dictionary = _pending_cards.pop_front()
 	var card_id := str(card.get("id", ""))
 	if not card_id.is_empty():
 		_seen_ids[card_id] = true
-	_next_allowed_unix = _now() + _cooldown_seconds
+	if apply_cooldown:
+		_next_allowed_unix = _now() + _cooldown_seconds
 	changed.emit()
 	return card
 
@@ -122,6 +140,17 @@ func _prune_expired() -> void:
 		return
 	_pending_cards = kept_cards
 	changed.emit()
+
+
+func _card_precedes(left: Dictionary, right: Dictionary) -> bool:
+	var left_priority := int(left.get("priority", 0))
+	var right_priority := int(right.get("priority", 0))
+	if left_priority != right_priority:
+		return left_priority > right_priority
+	return (
+		int(left.get("_queue_sequence", 0))
+		< int(right.get("_queue_sequence", 0))
+	)
 
 
 func _now() -> float:

@@ -7,6 +7,7 @@ extends Resource
 @export var species := ""
 @export_multiline var description := ""
 @export var sort_order := 0
+@export var dialogue_profile: PetDialogueProfile
 
 @export_category("Visuals")
 @export var idle_texture: Texture2D
@@ -141,3 +142,9 @@ func behavior_validation_errors() -> PackedStringArray:
 					]
 				)
 	return errors
+
+
+func dialogue_validation_errors() -> PackedStringArray:
+	if dialogue_profile == null:
+		return PackedStringArray()
+	return dialogue_profile.validation_errors()

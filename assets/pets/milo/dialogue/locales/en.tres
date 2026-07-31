@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="PetDialogueLocale" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_locale.gd" id="1_locale"]
+
+[resource]
+script = ExtResource("1_locale")
+locale_code = "en"
+translations = {
+"milo.click.01": "Hi! Is it playtime already?",
+"milo.click.02": "You came back! I knew you would.",
+"milo.click.03": "One more pat? Maybe two?",
+"milo.click.04": "Hello! I was being very patient.",
+"milo.focus_start.01": "Let's do this! I'll cheer quietly.",
+"milo.focus_start.02": "You focus. I'll guard the snacks.",
+"milo.focus_complete.01": "You did it! That deserves a celebration.",
+"milo.focus_complete.02": "Great job! Now we can take a break.",
+"milo.reminder_done.01": "Nice! Mission accomplished.",
+"milo.reminder_done.02": "Good job! Tiny win, big tail wag.",
+"milo.idle.01": "Do you think it's almost snack time?",
+"milo.idle.02": "I'm ready whenever you are!",
+"milo.idle.03": "I was sitting very still. Did you notice?"
+}

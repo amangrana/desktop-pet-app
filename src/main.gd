@@ -26,6 +26,18 @@ const CheckInManagerScript := preload(
 const CalendarCheckInSourceScript := preload(
 	"res://src/checkins/calendar_check_in_source.gd"
 )
+const DailyBriefingSourceScript := preload(
+	"res://src/checkins/daily_briefing_source.gd"
+)
+const MockWeatherCheckInSourceScript := preload(
+	"res://src/checkins/mock_weather_check_in_source.gd"
+)
+const WeatherCheckInSourceScript := preload(
+	"res://src/checkins/weather_check_in_source.gd"
+)
+const OpenMeteoWeatherProviderScript := preload(
+	"res://src/checkins/open_meteo_weather_provider.gd"
+)
 const GoogleCalendarProviderScript := preload(
 	"res://src/checkins/google_calendar_provider.gd"
 )
@@ -40,6 +52,12 @@ const ActivityCenterViewStateScript := preload(
 )
 const ActivityCenterSessionLogScript := preload(
 	"res://src/Activity/activity_center_session_log.gd"
+)
+const PetDialogueManagerScript := preload(
+	"res://src/pets/pet_dialogue_manager.gd"
+)
+const PetDialogueProfileScript := preload(
+	"res://src/pets/pet_dialogue_profile.gd"
 )
 const CHECKBOX_UNCHECKED_ICON_PATH := (
 	"res://assets/ui/checkbox_unchecked.svg"
@@ -59,6 +77,14 @@ const AUTO_BREAK_DELAY_SECONDS := 5.0
 const AUTO_TRANSITION_LATE_GRACE_SECONDS := 2.0
 const INFORMATION_NOTIFICATION_SECONDS := 2.5
 const COMPLETION_NOTIFICATION_SECONDS := 5.0
+const PET_DIALOGUE_NOTIFICATION_SECONDS := 3.0
+const PET_DIALOGUE_POLL_SECONDS := 15.0
+const PET_DIALOGUE_TEXT_WIDTH := 208.0
+const WEATHER_REFRESH_SECONDS := 3 * 60 * 60
+const WEATHER_ACTIVE_CACHE_SECONDS := 30 * 60
+const DAILY_BRIEFING_START_DELAY_SECONDS := 5.0
+const DAILY_BRIEFING_WEATHER_MAX_AGE_SECONDS := 6 * 60 * 60
+const DAILY_BRIEFING_TEXT_WIDTH := 236.0
 const GOOGLE_CALENDAR_CLIENT_ID := (
 	GoogleOAuthClientConfigScript.DEFAULT_CLIENT_ID
 )
@@ -73,9 +99,10 @@ const QUIET_STATUS_ACTIVE_COLOR := Color("#72C990")
 const QUIET_STATUS_INACTIVE_COLOR := Color("#8E8795")
 const LANGUAGE_SETTINGS_WINDOW_SIZE := Vector2i(390, 250)
 const LANGUAGE_SETTINGS_WINDOW_MAX_HEIGHT := 480
-const PET_NOTES_WINDOW_SIZE := Vector2i(420, 310)
-const PET_NOTES_WINDOW_MAX_HEIGHT := 520
+const PET_NOTES_WINDOW_SIZE := Vector2i(440, 515)
+const PET_NOTES_WINDOW_MAX_HEIGHT := 680
 const BEHAVIOR_PREVIEW_WINDOW_SIZE := Vector2i(440, 470)
+const DIALOGUE_PREVIEW_WINDOW_SIZE := Vector2i(420, 420)
 const SETTINGS_WINDOW_SCREEN_MARGIN := 32
 const MENU_FONT_SIZE_MIN := 14
 const MENU_FONT_SIZE_BASE := 16
@@ -106,6 +133,13 @@ const BEHAVIOR_PREVIEW_LABEL_KEYS := {
 	&"idle_yawn": "dev_preview_idle_yawn",
 	&"idle_stretch": "dev_preview_idle_stretch",
 }
+const DIALOGUE_PREVIEW_LABEL_KEYS := {
+	&"click": "dev_dialogue_click",
+	&"focus_start": "dev_dialogue_focus_start",
+	&"focus_complete": "dev_dialogue_focus_complete",
+	&"reminder_done": "dev_dialogue_reminder_done",
+	&"idle": "dev_dialogue_idle",
+}
 
 const MENU_FOCUS_SUBMENU := 1
 const MENU_REMINDERS_SUBMENU := 2
@@ -121,6 +155,7 @@ const MENU_ACTIVITY_SENSING := 15
 const MENU_ACTIVITY_COUNTS := 16
 const MENU_CLEAR_ACTIVITY := 17
 const MENU_ACTIVITY_STATUS := 18
+const MENU_WEATHER_NOW := 19
 const MENU_SCALE_75 := 30
 const MENU_SCALE_100 := 31
 const MENU_SCALE_125 := 32
@@ -147,9 +182,13 @@ const MENU_DURATION_SETTINGS := 57
 const MENU_LANGUAGE_SETTINGS := 58
 const MENU_AMBIENT_CARDS := 59
 const MENU_STOP_REMINDER := 60
+const MENU_PET_DIALOGUE := 61
 const MENU_QUIET_HOURS := 62
 const MENU_DEV_AMBIENT_CARD := 64
 const MENU_DEV_BEHAVIOR_PREVIEW := 65
+const MENU_DEV_WEATHER_CARD := 66
+const MENU_DEV_DAILY_BRIEFING := 67
+const MENU_DEV_DIALOGUE_PREVIEW := 68
 const MENU_EXIT := 90
 const MENU_PET_BASE := 1000
 
@@ -224,15 +263,24 @@ var pet_notes_scroll: ScrollContainer
 var pet_notes_scroll_content: VBoxContainer
 var pet_notes_footer: HBoxContainer
 var pet_notes_master_card: PanelContainer
+var pet_notes_daily_briefing_card: PanelContainer
 var pet_notes_calendar_card: PanelContainer
+var pet_notes_weather_card: PanelContainer
 var pet_notes_settings_title: Label
 var pet_notes_settings_note: Label
 var pet_notes_enabled_check: CheckBox
+var daily_briefing_enabled_check: CheckBox
 var calendar_notes_enabled_check: CheckBox
 var google_calendar_status_label: Label
 var google_calendar_connect_button: Button
 var google_calendar_sync_button: Button
 var google_calendar_disconnect_button: Button
+var weather_notes_enabled_check: CheckBox
+var weather_city_label: Label
+var weather_city_edit: LineEdit
+var weather_status_label: Label
+var weather_refresh_button: Button
+var weather_attribution_link: LinkButton
 var pet_notes_save_button: Button
 var pet_notes_cancel_button: Button
 var behavior_preview_window: Window
@@ -242,12 +290,22 @@ var behavior_preview_pet_label: Label
 var behavior_preview_list: VBoxContainer
 var behavior_preview_buttons: Dictionary = {}
 var behavior_preview_close_button: Button
+var dialogue_preview_window: Window
+var dialogue_preview_title: Label
+var dialogue_preview_note: Label
+var dialogue_preview_pet_label: Label
+var dialogue_preview_list: VBoxContainer
+var dialogue_preview_buttons: Dictionary = {}
+var dialogue_preview_close_button: Button
 var checkbox_unchecked_icon: Texture2D
 var checkbox_checked_icon: Texture2D
 var notification_timer: Timer
 var ambient_card_tick_timer: Timer
 var auto_transition_timer: Timer
 var check_in_poll_timer: Timer
+var weather_refresh_timer: Timer
+var daily_briefing_start_timer: Timer
+var pet_dialogue_poll_timer: Timer
 var activity_monitor
 var activity_stats
 var activity_center_log
@@ -256,9 +314,14 @@ var windows_taskbar_adapter
 var timer_manager
 var reminder_manager
 var check_in_manager
+var daily_briefing_source
 var calendar_check_in_source
+var mock_weather_check_in_source
+var weather_check_in_source
+var weather_provider
 var google_calendar_provider
 var google_calendar_credential_store
+var pet_dialogue_manager
 var pet_definitions: Array[PetDefinition] = []
 var pet_menu_id_to_pet_id: Dictionary = {}
 var settings := {
@@ -271,8 +334,15 @@ var settings := {
 	"reminder_snapshot": {},
 	"focus_duration_seconds": FOCUS_DURATION_SECONDS,
 	"break_duration_seconds": BREAK_DURATION_SECONDS,
+	"pet_dialogue_enabled": true,
 	"ambient_cards_enabled": false,
+	"daily_briefing_enabled": true,
+	"last_daily_briefing_date": "",
+	"last_weather_note_id": "",
 	"calendar_notes_enabled": false,
+	"weather_notes_enabled": false,
+	"weather_city": "",
+	"weather_snapshot": {},
 	"google_calendar_explicitly_disconnected": false,
 	"language": AppLocalizationScript.ENGLISH,
 	"has_saved_position": false,
@@ -310,6 +380,13 @@ var language_settings_base_note_height := -1
 var pet_notes_resize_queued := false
 var pet_notes_base_note_height := -1
 var pet_notes_base_status_height := -1
+var pet_notes_base_weather_status_height := -1
+var manual_weather_card: Dictionary = {}
+var manual_weather_request_pending := false
+var latest_calendar_events: Array[Dictionary] = []
+var daily_briefing_ready := false
+var auto_transition_dialogue_line := ""
+var pet_dialogue_notification_active := false
 
 
 func _ready() -> void:
@@ -319,6 +396,7 @@ func _ready() -> void:
 	_build_timer_pipeline()
 	_build_reminder_pipeline()
 	_build_check_in_pipeline()
+	_build_dialogue_pipeline()
 	_load_pet_definitions()
 	if pet_definitions.is_empty():
 		push_error("No valid pet definitions were found.")
@@ -334,6 +412,7 @@ func _ready() -> void:
 	_build_pet_notes_settings_window()
 	if OS.has_feature("editor"):
 		_build_behavior_preview_window()
+		_build_dialogue_preview_window()
 	_build_context_menu()
 	_build_system_tray()
 	_apply_scale(settings.display_scale, false)
@@ -398,16 +477,62 @@ func _build_reminder_pipeline() -> void:
 	add_child(reminder_manager)
 
 
+func _build_dialogue_pipeline() -> void:
+	pet_dialogue_manager = PetDialogueManagerScript.new()
+	pet_dialogue_manager.set_enabled(settings.pet_dialogue_enabled)
+	add_child(pet_dialogue_manager)
+
+	pet_dialogue_poll_timer = Timer.new()
+	pet_dialogue_poll_timer.wait_time = PET_DIALOGUE_POLL_SECONDS
+	pet_dialogue_poll_timer.one_shot = false
+	pet_dialogue_poll_timer.timeout.connect(_poll_pet_dialogue)
+	add_child(pet_dialogue_poll_timer)
+	pet_dialogue_poll_timer.start()
+
+
 func _build_check_in_pipeline() -> void:
 	check_in_manager = CheckInManagerScript.new()
 	check_in_manager.set_enabled(settings.ambient_cards_enabled)
 	add_child(check_in_manager)
 
+	daily_briefing_source = DailyBriefingSourceScript.new()
+	daily_briefing_source.card_ready.connect(
+		_handle_pet_note_card_ready
+	)
+	add_child(daily_briefing_source)
+
 	calendar_check_in_source = CalendarCheckInSourceScript.new()
-	calendar_check_in_source.event_ready.connect(
-		_handle_calendar_event_ready
+	calendar_check_in_source.card_ready.connect(
+		_handle_pet_note_card_ready
 	)
 	add_child(calendar_check_in_source)
+
+	weather_check_in_source = WeatherCheckInSourceScript.new()
+	weather_check_in_source.card_ready.connect(
+		_handle_pet_note_card_ready
+	)
+	add_child(weather_check_in_source)
+
+	weather_provider = OpenMeteoWeatherProviderScript.new()
+	weather_provider.state_changed.connect(
+		_handle_weather_state_changed
+	)
+	weather_provider.weather_updated.connect(
+		_handle_weather_updated
+	)
+	add_child(weather_provider)
+	weather_provider.restore_cached_weather(
+		settings.weather_snapshot
+	)
+
+	if OS.has_feature("editor"):
+		mock_weather_check_in_source = (
+			MockWeatherCheckInSourceScript.new()
+		)
+		mock_weather_check_in_source.card_ready.connect(
+			_handle_pet_note_card_ready
+		)
+		add_child(mock_weather_check_in_source)
 
 	google_calendar_provider = GoogleCalendarProviderScript.new()
 	google_calendar_provider.configure(
@@ -449,6 +574,25 @@ func _build_check_in_pipeline() -> void:
 	check_in_poll_timer.timeout.connect(_poll_check_ins)
 	add_child(check_in_poll_timer)
 	check_in_poll_timer.start()
+
+	weather_refresh_timer = Timer.new()
+	weather_refresh_timer.wait_time = WEATHER_REFRESH_SECONDS
+	weather_refresh_timer.one_shot = false
+	weather_refresh_timer.timeout.connect(_request_weather_refresh)
+	add_child(weather_refresh_timer)
+
+	daily_briefing_start_timer = Timer.new()
+	daily_briefing_start_timer.wait_time = (
+		DAILY_BRIEFING_START_DELAY_SECONDS
+	)
+	daily_briefing_start_timer.one_shot = true
+	daily_briefing_start_timer.timeout.connect(
+		_start_daily_briefing
+	)
+	add_child(daily_briefing_start_timer)
+	daily_briefing_start_timer.start()
+	_refresh_weather_schedule.call_deferred()
+	_request_weather_refresh.call_deferred()
 
 
 func _load_local_google_calendar_credentials() -> void:
@@ -602,8 +746,15 @@ func _select_pet(pet_id: StringName, save := true) -> bool:
 	var definition := PetRegistry.find_by_id(pet_definitions, pet_id)
 	if definition == null:
 		return false
+	if pet_dialogue_notification_active:
+		_hide_notification()
 
 	pet.set_definition(definition)
+	if pet_dialogue_manager != null:
+		pet_dialogue_manager.set_profile(
+			definition.dialogue_profile,
+			definition.pet_id
+		)
 	settings.selected_pet_id = String(definition.pet_id)
 
 	var window := get_window()
@@ -617,6 +768,7 @@ func _select_pet(pet_id: StringName, save := true) -> bool:
 	_update_menu_checks()
 	_refresh_tray_ui()
 	_refresh_behavior_preview_state()
+	_refresh_dialogue_preview_state()
 
 	if save:
 		_save_settings()
@@ -1434,6 +1586,201 @@ func _behavior_preview_label(behavior_id: StringName) -> String:
 	return String(behavior_id).replace("_", " ").capitalize()
 
 
+func _build_dialogue_preview_window() -> void:
+	dialogue_preview_window = Window.new()
+	dialogue_preview_window.name = "DialoguePreviewWindow"
+	dialogue_preview_window.size = DIALOGUE_PREVIEW_WINDOW_SIZE
+	dialogue_preview_window.min_size = DIALOGUE_PREVIEW_WINDOW_SIZE
+	dialogue_preview_window.unresizable = true
+	dialogue_preview_window.transient = true
+	dialogue_preview_window.exclusive = false
+	dialogue_preview_window.visible = false
+	dialogue_preview_window.close_requested.connect(
+		dialogue_preview_window.hide
+	)
+	add_child(dialogue_preview_window)
+
+	var background := ColorRect.new()
+	background.color = Color("#2B2434")
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dialogue_preview_window.add_child(background)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	dialogue_preview_window.add_child(margin)
+
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 9)
+	margin.add_child(content)
+
+	dialogue_preview_title = Label.new()
+	dialogue_preview_title.add_theme_font_size_override("font_size", 20)
+	dialogue_preview_title.add_theme_color_override(
+		"font_color",
+		Color("#F5EDF7")
+	)
+	content.add_child(dialogue_preview_title)
+
+	dialogue_preview_note = Label.new()
+	dialogue_preview_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dialogue_preview_note.custom_minimum_size = Vector2(0, 48)
+	dialogue_preview_note.add_theme_color_override(
+		"font_color",
+		Color("#C7BCCB")
+	)
+	content.add_child(dialogue_preview_note)
+
+	dialogue_preview_pet_label = Label.new()
+	dialogue_preview_pet_label.add_theme_font_size_override("font_size", 16)
+	dialogue_preview_pet_label.add_theme_color_override(
+		"font_color",
+		Color("#E6AFCB")
+	)
+	content.add_child(dialogue_preview_pet_label)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 190)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	content.add_child(scroll)
+
+	dialogue_preview_list = VBoxContainer.new()
+	dialogue_preview_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialogue_preview_list.add_theme_constant_override("separation", 9)
+	scroll.add_child(dialogue_preview_list)
+
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 8)
+	content.add_child(footer)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(spacer)
+	dialogue_preview_close_button = Button.new()
+	dialogue_preview_close_button.focus_mode = Control.FOCUS_NONE
+	dialogue_preview_close_button.custom_minimum_size = Vector2(90, 34)
+	dialogue_preview_close_button.pressed.connect(
+		dialogue_preview_window.hide
+	)
+	footer.add_child(dialogue_preview_close_button)
+	_refresh_dialogue_preview_state()
+
+
+func _open_dialogue_preview() -> void:
+	if dialogue_preview_window == null:
+		return
+	_set_pet_window_visible(true)
+	_refresh_dialogue_preview_state()
+	_popup_dialogue_preview_window()
+
+
+func _popup_dialogue_preview_window() -> void:
+	var scale := _settings_window_scale(
+		dialogue_preview_window,
+		DIALOGUE_PREVIEW_WINDOW_SIZE
+	)
+	var target_size := Vector2i(
+		roundi(DIALOGUE_PREVIEW_WINDOW_SIZE.x * scale),
+		roundi(DIALOGUE_PREVIEW_WINDOW_SIZE.y * scale)
+	)
+	dialogue_preview_window.min_size = Vector2i.ZERO
+	dialogue_preview_window.content_scale_mode = (
+		Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	)
+	dialogue_preview_window.content_scale_size = (
+		DIALOGUE_PREVIEW_WINDOW_SIZE
+	)
+	dialogue_preview_window.size = target_size
+	dialogue_preview_window.min_size = target_size
+
+	var screen := _settings_window_screen(dialogue_preview_window)
+	var usable_rect := DisplayServer.screen_get_usable_rect(screen)
+	var root_window := get_window()
+	var gap := roundi(12.0 * scale)
+	var target_position := Vector2i(
+		root_window.position.x + root_window.size.x + gap,
+		root_window.position.y
+	)
+	if target_position.x + target_size.x > usable_rect.end.x:
+		target_position.x = root_window.position.x - target_size.x - gap
+	target_position.x = clampi(
+		target_position.x,
+		usable_rect.position.x,
+		maxi(usable_rect.position.x, usable_rect.end.x - target_size.x)
+	)
+	target_position.y = clampi(
+		target_position.y,
+		usable_rect.position.y,
+		maxi(usable_rect.position.y, usable_rect.end.y - target_size.y)
+	)
+	dialogue_preview_window.popup(Rect2i(target_position, target_size))
+
+
+func _refresh_dialogue_preview_state() -> void:
+	if dialogue_preview_window == null:
+		return
+	dialogue_preview_window.title = _text(
+		"dev_dialogue_preview_window_title"
+	)
+	dialogue_preview_title.text = _text("dev_dialogue_preview_heading")
+	dialogue_preview_note.text = _text("dev_dialogue_preview_note")
+	dialogue_preview_pet_label.text = (
+		pet.get_display_name() if pet != null else ""
+	)
+	_rebuild_dialogue_preview_buttons()
+	dialogue_preview_close_button.text = _text("activity_center_close")
+
+
+func _rebuild_dialogue_preview_buttons() -> void:
+	if dialogue_preview_list == null:
+		return
+	for child in dialogue_preview_list.get_children():
+		dialogue_preview_list.remove_child(child)
+		child.queue_free()
+	dialogue_preview_buttons.clear()
+	if pet_dialogue_manager == null or pet_dialogue_manager.profile == null:
+		return
+	for context in pet_dialogue_manager.profile.configured_contexts():
+		var button := Button.new()
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2(0, 38)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.text = _dialogue_preview_label(context)
+		button.pressed.connect(_preview_pet_dialogue.bind(context))
+		dialogue_preview_buttons[context] = button
+		dialogue_preview_list.add_child(button)
+
+
+func _dialogue_preview_label(context: StringName) -> String:
+	if DIALOGUE_PREVIEW_LABEL_KEYS.has(context):
+		return _text(str(DIALOGUE_PREVIEW_LABEL_KEYS[context]))
+	return String(context).replace("_", " ").capitalize()
+
+
+func _preview_pet_dialogue(context: StringName) -> bool:
+	if pet_dialogue_manager == null:
+		return false
+	if notification_action_kind != TimerManagerScript.Kind.NONE:
+		return false
+	var line: String = pet_dialogue_manager.request_line(
+		context,
+		str(settings.language),
+		true
+	)
+	if line.is_empty():
+		return false
+	_show_notification(
+		_fit_pet_dialogue_line(line),
+		PET_DIALOGUE_NOTIFICATION_SECONDS
+	)
+	pet_dialogue_notification_active = true
+	return true
+
+
 func _build_duration_settings_window() -> void:
 	duration_settings_window = Window.new()
 	duration_settings_window.name = "DurationSettingsWindow"
@@ -2200,6 +2547,20 @@ func _build_pet_notes_settings_window() -> void:
 	)
 	pet_notes_master_card.add_child(pet_notes_enabled_check)
 
+	pet_notes_daily_briefing_card = PanelContainer.new()
+	pet_notes_daily_briefing_card.add_theme_stylebox_override(
+		"panel",
+		_settings_card_style()
+	)
+	pet_notes_scroll_content.add_child(pet_notes_daily_briefing_card)
+
+	daily_briefing_enabled_check = CheckBox.new()
+	daily_briefing_enabled_check.focus_mode = Control.FOCUS_NONE
+	_style_settings_checkbox(daily_briefing_enabled_check)
+	pet_notes_daily_briefing_card.add_child(
+		daily_briefing_enabled_check
+	)
+
 	pet_notes_calendar_card = PanelContainer.new()
 	pet_notes_calendar_card.add_theme_stylebox_override(
 		"panel",
@@ -2262,6 +2623,96 @@ func _build_pet_notes_settings_window() -> void:
 		_disconnect_google_calendar
 	)
 	calendar_buttons.add_child(google_calendar_disconnect_button)
+
+	pet_notes_weather_card = PanelContainer.new()
+	pet_notes_weather_card.add_theme_stylebox_override(
+		"panel",
+		_settings_card_style()
+	)
+	pet_notes_scroll_content.add_child(pet_notes_weather_card)
+
+	var weather_content := VBoxContainer.new()
+	weather_content.add_theme_constant_override("separation", 4)
+	pet_notes_weather_card.add_child(weather_content)
+
+	weather_notes_enabled_check = CheckBox.new()
+	weather_notes_enabled_check.focus_mode = Control.FOCUS_NONE
+	_style_settings_checkbox(weather_notes_enabled_check)
+	weather_notes_enabled_check.toggled.connect(
+		_update_weather_dependency_state
+	)
+	weather_content.add_child(weather_notes_enabled_check)
+
+	var weather_city_row := HBoxContainer.new()
+	weather_city_row.add_theme_constant_override("separation", 8)
+	weather_content.add_child(weather_city_row)
+
+	weather_city_label = Label.new()
+	weather_city_label.custom_minimum_size.x = 42
+	weather_city_label.add_theme_font_size_override("font_size", 12)
+	weather_city_label.add_theme_color_override(
+		"font_color",
+		Color("#E8E0F0")
+	)
+	weather_city_row.add_child(weather_city_label)
+
+	weather_city_edit = LineEdit.new()
+	weather_city_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	weather_city_edit.custom_minimum_size.y = 30
+	weather_city_edit.max_length = 120
+	weather_city_edit.text_submitted.connect(
+		func(_text_value: String) -> void:
+			_check_weather_now()
+	)
+	weather_city_edit.text_changed.connect(
+		func(_text_value: String) -> void:
+			_refresh_weather_status()
+	)
+	_style_settings_line_edit(weather_city_edit)
+	weather_city_row.add_child(weather_city_edit)
+
+	weather_status_label = Label.new()
+	weather_status_label.autowrap_mode = (
+		TextServer.AUTOWRAP_WORD_SMART
+	)
+	weather_status_label.custom_minimum_size = Vector2(0, 34)
+	weather_status_label.add_theme_font_size_override("font_size", 12)
+	weather_status_label.add_theme_color_override(
+		"font_color",
+		Color("#C8BDD9")
+	)
+	weather_content.add_child(weather_status_label)
+
+	var weather_footer := HBoxContainer.new()
+	weather_footer.add_theme_constant_override("separation", 8)
+	weather_content.add_child(weather_footer)
+
+	weather_refresh_button = Button.new()
+	weather_refresh_button.focus_mode = Control.FOCUS_NONE
+	_style_settings_button(weather_refresh_button)
+	weather_refresh_button.pressed.connect(_check_weather_now)
+	weather_footer.add_child(weather_refresh_button)
+
+	weather_attribution_link = LinkButton.new()
+	weather_attribution_link.focus_mode = Control.FOCUS_NONE
+	weather_attribution_link.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+	weather_attribution_link.text_direction = (
+		Control.TEXT_DIRECTION_INHERITED
+	)
+	weather_attribution_link.add_theme_font_size_override(
+		"font_size",
+		11
+	)
+	weather_attribution_link.add_theme_color_override(
+		"font_color",
+		Color("#B9A7DE")
+	)
+	weather_attribution_link.pressed.connect(
+		_open_weather_attribution
+	)
+	weather_footer.add_child(weather_attribution_link)
 
 	pet_notes_footer = HBoxContainer.new()
 	pet_notes_footer.alignment = BoxContainer.ALIGNMENT_END
@@ -2391,6 +2842,36 @@ func _style_settings_checkbox(check_box: CheckBox) -> void:
 		)
 
 
+func _style_settings_line_edit(line_edit: LineEdit) -> void:
+	line_edit.add_theme_font_size_override("font_size", 12)
+	line_edit.add_theme_color_override("font_color", Color.WHITE)
+	line_edit.add_theme_color_override(
+		"font_placeholder_color",
+		Color("#9E91AA")
+	)
+	line_edit.add_theme_color_override(
+		"caret_color",
+		Color.WHITE
+	)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#302839")
+	normal.border_color = Color("#5B4D68")
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(7)
+	normal.content_margin_left = 9
+	normal.content_margin_right = 9
+	normal.content_margin_top = 5
+	normal.content_margin_bottom = 5
+	line_edit.add_theme_stylebox_override("normal", normal)
+	var focus := normal.duplicate()
+	focus.border_color = Color("#8F79C7")
+	focus.set_border_width_all(2)
+	line_edit.add_theme_stylebox_override("focus", focus)
+	var read_only := normal.duplicate()
+	read_only.bg_color = Color("#292331")
+	line_edit.add_theme_stylebox_override("read_only", read_only)
+
+
 func _load_svg_texture(path: String) -> Texture2D:
 	var imported_texture := load(path) as Texture2D
 	if imported_texture != null:
@@ -2414,9 +2895,16 @@ func _open_pet_notes_settings() -> void:
 	pet_notes_enabled_check.button_pressed = (
 		settings.ambient_cards_enabled
 	)
+	daily_briefing_enabled_check.button_pressed = (
+		settings.daily_briefing_enabled
+	)
 	calendar_notes_enabled_check.button_pressed = (
 		settings.calendar_notes_enabled
 	)
+	weather_notes_enabled_check.button_pressed = (
+		settings.weather_notes_enabled
+	)
+	weather_city_edit.text = str(settings.weather_city)
 	_refresh_pet_notes_settings_texts()
 	_popup_scaled_settings_window(
 		pet_notes_settings_window,
@@ -2427,42 +2915,124 @@ func _open_pet_notes_settings() -> void:
 
 func _update_pet_notes_dependency_state(enabled: bool) -> void:
 	if (
-		pet_notes_calendar_card == null
+		pet_notes_daily_briefing_card == null
+		or pet_notes_calendar_card == null
+		or pet_notes_weather_card == null
+		or daily_briefing_enabled_check == null
 		or calendar_notes_enabled_check == null
 	):
 		return
+	daily_briefing_enabled_check.disabled = not enabled
+	pet_notes_daily_briefing_card.modulate = (
+		Color.WHITE
+		if enabled
+		else Color(0.68, 0.68, 0.68, 0.72)
+	)
 	calendar_notes_enabled_check.disabled = not enabled
 	pet_notes_calendar_card.modulate = (
 		Color.WHITE
 		if enabled
 		else Color(0.68, 0.68, 0.68, 0.72)
 	)
+	weather_notes_enabled_check.disabled = not enabled
+	pet_notes_weather_card.modulate = (
+		Color.WHITE
+	)
+	_update_weather_dependency_state(
+		weather_notes_enabled_check.button_pressed
+	)
 	_refresh_google_calendar_status()
 
 
+func _update_weather_dependency_state(enabled: bool) -> void:
+	if weather_city_edit == null or weather_refresh_button == null:
+		return
+	weather_city_edit.editable = true
+	weather_refresh_button.disabled = (
+		weather_city_edit.text.strip_edges().length() < 2
+	)
+	_refresh_weather_status()
+
+
 func _save_pet_notes_settings() -> void:
-	_apply_pet_notes_settings()
+	if not _apply_pet_notes_settings():
+		return
 	pet_notes_settings_window.hide()
 
 
-func _apply_pet_notes_settings() -> void:
-	settings.ambient_cards_enabled = (
+func _apply_pet_notes_settings(
+	request_weather := true
+) -> bool:
+	var next_master_enabled: bool = (
 		pet_notes_enabled_check.button_pressed
+	)
+	var next_weather_enabled: bool = (
+		weather_notes_enabled_check.button_pressed
+	)
+	var next_weather_city := weather_city_edit.text.strip_edges()
+	if (
+		next_master_enabled
+		and next_weather_enabled
+		and next_weather_city.length() < 2
+	):
+		weather_provider.fetch_weather(
+			next_weather_city,
+			str(settings.language)
+		)
+		_refresh_weather_status()
+		return false
+	var weather_city_changed := (
+		next_weather_city != str(settings.weather_city)
+	)
+	settings.ambient_cards_enabled = (
+		next_master_enabled
+	)
+	settings.daily_briefing_enabled = (
+		daily_briefing_enabled_check.button_pressed
 	)
 	settings.calendar_notes_enabled = (
 		calendar_notes_enabled_check.button_pressed
 	)
+	settings.weather_notes_enabled = next_weather_enabled
+	settings.weather_city = next_weather_city
 	check_in_manager.set_enabled(settings.ambient_cards_enabled)
 	if not settings.ambient_cards_enabled and ambient_card_active:
 		_hide_notification()
+	if not settings.daily_briefing_enabled:
+		check_in_manager.remove_source("daily_briefing")
 	if not settings.calendar_notes_enabled:
 		check_in_manager.remove_source("calendar")
+	if not settings.weather_notes_enabled:
+		check_in_manager.remove_source("weather")
+	if weather_city_changed:
+		check_in_manager.remove_source("weather")
+		weather_check_in_source.reset_history()
+		manual_weather_request_pending = false
+		manual_weather_card.clear()
+		settings.weather_snapshot = {}
+		weather_provider.clear()
+	_refresh_weather_schedule()
+	if settings.ambient_cards_enabled:
+		daily_briefing_ready = true
+	_queue_daily_briefing_if_needed(true)
+	if (
+		request_weather
+		and settings.ambient_cards_enabled
+		and settings.weather_notes_enabled
+		and (
+			weather_city_changed
+			or weather_provider.last_weather.is_empty()
+		)
+	):
+		_request_weather_refresh()
 	_update_menu_checks()
 	_save_settings()
+	return true
 
 
 func _connect_google_calendar() -> void:
-	_apply_pet_notes_settings()
+	if not _apply_pet_notes_settings():
+		return
 	_begin_google_oauth_browser_handoff()
 	if not google_calendar_provider.connect_account():
 		_end_google_oauth_browser_handoff()
@@ -2500,16 +3070,254 @@ func _end_google_oauth_browser_handoff() -> void:
 
 
 func _sync_google_calendar() -> void:
-	_apply_pet_notes_settings()
+	if not _apply_pet_notes_settings():
+		return
 	google_calendar_provider.sync_events()
 	_refresh_google_calendar_status()
+
+
+func _check_weather_now() -> void:
+	if not _apply_pet_notes_settings(false):
+		return
+	_request_manual_weather()
+
+
+func _request_weather_refresh() -> void:
+	if (
+		weather_provider == null
+		or not settings.ambient_cards_enabled
+		or not settings.weather_notes_enabled
+		or str(settings.weather_city).length() < 2
+	):
+		return
+	weather_provider.fetch_weather(
+		str(settings.weather_city),
+		str(settings.language)
+	)
+	_refresh_weather_status()
+
+
+func _refresh_weather_schedule() -> void:
+	if weather_refresh_timer == null:
+		return
+	var should_run: bool = (
+		settings.ambient_cards_enabled
+		and settings.weather_notes_enabled
+		and str(settings.weather_city).length() >= 2
+	)
+	if should_run:
+		if weather_refresh_timer.is_stopped():
+			weather_refresh_timer.start()
+	else:
+		weather_refresh_timer.stop()
+
+
+func _handle_weather_state_changed(
+	next_state: int,
+	_message: String
+) -> void:
+	if next_state == OpenMeteoWeatherProviderScript.State.ERROR:
+		_handle_manual_weather_error()
+	_refresh_weather_status()
+
+
+func _handle_weather_updated(weather: Dictionary) -> void:
+	settings.weather_snapshot = _weather_cache_snapshot(weather)
+	_save_settings()
+	_refresh_weather_status()
+	if daily_briefing_ready:
+		_queue_daily_briefing_if_needed(true)
+	if manual_weather_request_pending:
+		manual_weather_request_pending = false
+		manual_weather_card = (
+			weather_check_in_source.create_weather_card(weather)
+		)
+		_try_show_pending_manual_weather()
+		return
+	if (
+		not settings.ambient_cards_enabled
+		or not settings.weather_notes_enabled
+	):
+		return
+	if (
+		settings.daily_briefing_enabled
+		and str(settings.last_daily_briefing_date)
+		!= daily_briefing_source.today_key()
+	):
+		# Let the startup briefing absorb this weather update instead of
+		# showing a separate weather card immediately before it.
+		return
+	var weather_card_id: String = (
+		weather_check_in_source.card_id_for(weather)
+	)
+	if weather_card_id == str(settings.last_weather_note_id):
+		return
+	weather_check_in_source.publish_weather(weather)
+	_try_show_check_in()
+
+
+func _show_weather_now() -> void:
+	var city := str(settings.weather_city).strip_edges()
+	if city.length() < 2:
+		_open_pet_notes_settings()
+		weather_city_edit.grab_focus.call_deferred()
+		return
+	manual_weather_request_pending = true
+	manual_weather_card.clear()
+	if _weather_cache_is_fresh(weather_provider.last_weather, city):
+		manual_weather_request_pending = false
+		manual_weather_card = (
+			weather_check_in_source.create_weather_card(
+				weather_provider.last_weather
+			)
+		)
+		_try_show_pending_manual_weather()
+		return
+	if (
+		weather_provider.state
+		== OpenMeteoWeatherProviderScript.State.RESOLVING_CITY
+		or weather_provider.state
+		== OpenMeteoWeatherProviderScript.State.FETCHING_WEATHER
+	):
+		return
+	_request_manual_weather()
+
+
+func _request_manual_weather() -> void:
+	var city := str(settings.weather_city).strip_edges()
+	if city.length() < 2:
+		weather_provider.fetch_weather(city, str(settings.language))
+		return
+	manual_weather_request_pending = true
+	manual_weather_card.clear()
+	if (
+		not _health_reminder_is_visible()
+		and not pet_notes_settings_window.visible
+	):
+		_show_confirmation_notification(
+			_text("weather_checking"),
+			OpenMeteoWeatherProviderScript.REQUEST_TIMEOUT_SECONDS
+		)
+	weather_provider.fetch_weather(city, str(settings.language))
+	_refresh_weather_status()
+
+
+func _weather_cache_is_fresh(
+	weather: Dictionary,
+	city: String
+) -> bool:
+	if weather.is_empty():
+		return false
+	var requested_city := str(
+		weather.get("requested_city", "")
+	).strip_edges()
+	if (
+		not requested_city.is_empty()
+		and requested_city.to_lower() != city.strip_edges().to_lower()
+	):
+		return false
+	var fetched_unix := float(weather.get("fetched_unix", 0.0))
+	var age := Time.get_unix_time_from_system() - fetched_unix
+	return age >= 0.0 and age <= WEATHER_ACTIVE_CACHE_SECONDS
+
+
+func _handle_manual_weather_error() -> void:
+	if not manual_weather_request_pending:
+		return
+	manual_weather_request_pending = false
+	var city := str(settings.weather_city).strip_edges()
+	if _weather_cache_matches_city(weather_provider.last_weather, city):
+		manual_weather_card = (
+			weather_check_in_source.create_weather_card(
+				weather_provider.last_weather
+			)
+		)
+		_try_show_pending_manual_weather()
+		return
+	manual_weather_card.clear()
+	if pet_notes_settings_window.visible:
+		return
+	_show_confirmation_notification(
+		_weather_error_message(weather_provider.status_message),
+		COMPLETION_NOTIFICATION_SECONDS
+	)
+
+
+func _weather_cache_matches_city(
+	weather: Dictionary,
+	city: String
+) -> bool:
+	if weather.is_empty():
+		return false
+	var requested_city := str(
+		weather.get("requested_city", "")
+	).strip_edges()
+	return (
+		requested_city.is_empty()
+		or requested_city.to_lower() == city.strip_edges().to_lower()
+	)
+
+
+func _health_reminder_is_visible() -> bool:
+	return (
+		notification_panel != null
+		and notification_panel.visible
+		and notification_action_kind != TimerManagerScript.Kind.NONE
+	)
+
+
+func _try_show_pending_manual_weather() -> bool:
+	if (
+		manual_weather_card.is_empty()
+		or _health_reminder_is_visible()
+		or activity_center_window.visible
+		or duration_settings_window.visible
+		or quiet_settings_window.visible
+		or language_settings_window.visible
+		or pet_notes_settings_window.visible
+	):
+		return false
+	var card := manual_weather_card.duplicate(true)
+	manual_weather_card.clear()
+	_show_pet_note_card(card)
+	return true
+
+
+func _weather_cache_snapshot(weather: Dictionary) -> Dictionary:
+	var snapshot := {}
+	for key in [
+		"id",
+		"name",
+		"display_name",
+		"country",
+		"country_code",
+		"timezone",
+		"temperature_c",
+		"weather_code",
+		"temperature_max_c",
+		"temperature_min_c",
+		"observed_at",
+		"requested_city",
+		"fetched_unix",
+	]:
+		if weather.has(key):
+			snapshot[key] = weather[key]
+	return snapshot
+
+
+func _open_weather_attribution() -> void:
+	pet_notes_settings_window.hide()
+	OS.shell_open(WeatherCheckInSourceScript.ATTRIBUTION_URL)
 
 
 func _disconnect_google_calendar() -> void:
 	_set_google_calendar_explicit_disconnect(true)
 	google_calendar_provider.disconnect_account()
+	latest_calendar_events.clear()
 	calendar_check_in_source.replace_events([])
 	check_in_manager.remove_source("calendar")
+	if daily_briefing_ready:
+		_queue_daily_briefing_if_needed(true)
 	_start_google_calendar_credential_delete()
 
 
@@ -2520,15 +3328,30 @@ func _refresh_pet_notes_settings_texts() -> void:
 	pet_notes_settings_title.text = _text("pet_notes_heading")
 	pet_notes_settings_note.text = _text("pet_notes_note")
 	pet_notes_enabled_check.text = _text("pet_notes_enabled")
+	daily_briefing_enabled_check.text = _text(
+		"daily_briefing_enabled"
+	)
 	calendar_notes_enabled_check.text = _text("calendar_notes_enabled")
 	google_calendar_connect_button.text = _text("google_calendar_connect")
 	google_calendar_sync_button.text = _text("google_calendar_sync")
 	google_calendar_disconnect_button.text = _text(
 		"google_calendar_disconnect"
 	)
+	weather_notes_enabled_check.text = _text(
+		"weather_notes_enabled"
+	)
+	weather_city_label.text = _text("weather_city")
+	weather_city_edit.placeholder_text = _text(
+		"weather_city_placeholder"
+	)
+	weather_refresh_button.text = _text("weather_check_now")
+	weather_attribution_link.text = _text(
+		"weather_attribution"
+	)
 	pet_notes_cancel_button.text = _text("duration_cancel")
 	pet_notes_save_button.text = _text("duration_save")
 	_refresh_google_calendar_status()
+	_refresh_weather_status()
 
 
 func _refresh_google_calendar_status() -> void:
@@ -2619,6 +3442,134 @@ func _refresh_google_calendar_status() -> void:
 	_queue_pet_notes_window_resize()
 
 
+func _refresh_weather_status() -> void:
+	if weather_status_label == null or weather_provider == null:
+		return
+	var master_enabled := (
+		pet_notes_enabled_check != null
+		and pet_notes_enabled_check.button_pressed
+	)
+	var weather_enabled := (
+		weather_notes_enabled_check != null
+		and weather_notes_enabled_check.button_pressed
+	)
+	var city := (
+		weather_city_edit.text.strip_edges()
+		if weather_city_edit != null
+		else str(settings.weather_city)
+	)
+	var state: int = weather_provider.state
+	var is_busy := (
+		state
+		== OpenMeteoWeatherProviderScript.State.RESOLVING_CITY
+		or state
+		== OpenMeteoWeatherProviderScript.State.FETCHING_WEATHER
+	)
+	if city.length() < 2:
+		weather_status_label.text = _text(
+			"weather_status_city_required"
+		)
+	elif (
+		state
+		== OpenMeteoWeatherProviderScript.State.RESOLVING_CITY
+	):
+		weather_status_label.text = _text(
+			"weather_status_resolving",
+			[city]
+		)
+	elif (
+		state
+		== OpenMeteoWeatherProviderScript.State.FETCHING_WEATHER
+	):
+		weather_status_label.text = _text(
+			"weather_status_fetching"
+		)
+	elif (
+		state == OpenMeteoWeatherProviderScript.State.READY
+		and not weather_provider.last_weather.is_empty()
+		and _weather_cache_matches_city(
+			weather_provider.last_weather,
+			city
+		)
+	):
+		var weather: Dictionary = weather_provider.last_weather
+		weather_status_label.text = _text(
+			"weather_status_ready",
+			[
+				str(
+					weather.get(
+						"display_name",
+						weather.get("name", city)
+					)
+				),
+				int(
+					round(
+						float(
+							weather.get(
+								"temperature_c",
+								0.0
+							)
+						)
+					)
+				),
+			]
+		)
+	elif state == OpenMeteoWeatherProviderScript.State.ERROR:
+		weather_status_label.text = _weather_error_message(
+			weather_provider.status_message
+		)
+	elif not master_enabled or not weather_enabled:
+		weather_status_label.text = _text("weather_status_off")
+	else:
+		weather_status_label.text = _text(
+			"weather_status_not_checked"
+		)
+	weather_refresh_button.disabled = (
+		city.length() < 2
+		or is_busy
+	)
+	weather_city_edit.editable = not is_busy
+	_queue_pet_notes_window_resize()
+
+
+func _weather_error_message(error_code: String) -> String:
+	if (
+		not weather_provider.last_weather.is_empty()
+		and error_code != "city_required"
+		and error_code != "city_not_found"
+	):
+		var cached: Dictionary = weather_provider.last_weather
+		return _text(
+			"weather_error_using_cached",
+			[
+				str(
+					cached.get(
+						"display_name",
+						cached.get("name", "")
+					)
+				),
+				int(
+					round(
+						float(
+							cached.get("temperature_c", 0.0)
+						)
+					)
+				),
+			]
+		)
+	match error_code:
+		"city_required":
+			return _text("weather_status_city_required")
+		"city_not_found":
+			return _text("weather_error_city_not_found")
+		"network_error":
+			return _text("weather_error_network")
+		"service_error":
+			return _text("weather_error_service")
+		_:
+			return _text("weather_error_unknown")
+
+
 func _queue_pet_notes_window_resize() -> void:
 	if (
 		pet_notes_settings_window == null
@@ -2647,18 +3598,35 @@ func _resize_pet_notes_settings_window() -> void:
 		34,
 		PET_NOTES_WINDOW_SIZE.x - 64
 	)
+	var weather_status_height := _wrapped_label_height(
+		weather_status_label,
+		34,
+		PET_NOTES_WINDOW_SIZE.x - 64
+	)
 	if pet_notes_base_note_height < 0:
 		pet_notes_base_note_height = note_height
 	if pet_notes_base_status_height < 0:
 		pet_notes_base_status_height = status_height
+	if pet_notes_base_weather_status_height < 0:
+		pet_notes_base_weather_status_height = (
+			weather_status_height
+		)
 	pet_notes_settings_note.custom_minimum_size.y = note_height
 	google_calendar_status_label.custom_minimum_size.y = status_height
+	weather_status_label.custom_minimum_size.y = (
+		weather_status_height
+	)
 	_resize_centered_settings_window(
 		pet_notes_settings_window,
 		PET_NOTES_WINDOW_SIZE,
 		PET_NOTES_WINDOW_MAX_HEIGHT,
 		maxi(0, note_height - pet_notes_base_note_height)
 		+ maxi(0, status_height - pet_notes_base_status_height)
+		+ maxi(
+			0,
+			weather_status_height
+			- pet_notes_base_weather_status_height
+		)
 	)
 
 
@@ -2942,6 +3910,8 @@ func _build_context_menu() -> void:
 	_set_menu_disabled(activity_menu, MENU_ACTIVITY_STATUS, true)
 	activity_menu.add_separator()
 	activity_menu.add_item(_text("clear_activity"), MENU_CLEAR_ACTIVITY)
+	activity_menu.add_separator()
+	activity_menu.add_item(_text("weather_now"), MENU_WEATHER_NOW)
 
 	pets_menu = _create_submenu("PetsMenu")
 	for index in pet_definitions.size():
@@ -2981,6 +3951,10 @@ func _build_context_menu() -> void:
 	settings_menu.add_item(
 		_text("ambient_cards"),
 		MENU_AMBIENT_CARDS
+	)
+	settings_menu.add_check_item(
+		_text("pet_dialogue_enabled"),
+		MENU_PET_DIALOGUE
 	)
 
 	context_menu.add_submenu_node_item(
@@ -3033,10 +4007,22 @@ func _build_context_menu() -> void:
 			_text("dev_ambient_card"),
 			MENU_DEV_AMBIENT_CARD
 		)
+		developer_menu.add_item(
+			_text("dev_weather_card"),
+			MENU_DEV_WEATHER_CARD
+		)
+		developer_menu.add_item(
+			_text("dev_daily_briefing"),
+			MENU_DEV_DAILY_BRIEFING
+		)
 		developer_menu.add_separator()
 		developer_menu.add_item(
 			_text("dev_behavior_preview"),
 			MENU_DEV_BEHAVIOR_PREVIEW
+		)
+		developer_menu.add_item(
+			_text("dev_dialogue_preview"),
+			MENU_DEV_DIALOGUE_PREVIEW
 		)
 		context_menu.add_submenu_node_item(
 			_text("developer"),
@@ -3221,6 +4207,7 @@ func _handle_pet_tap(viewport_position: Vector2) -> void:
 		_handle_focus_hotspot_tap()
 		return
 	pet.react_to_click()
+	_try_show_pet_dialogue(PetDialogueProfileScript.CONTEXT_CLICK)
 
 
 func _handle_focus_hotspot_tap() -> void:
@@ -3241,13 +4228,16 @@ func _handle_focus_hotspot_tap() -> void:
 			_focus_duration_seconds()
 		)
 		_show_notification(
-			_text(
-				"focus_started",
-				[
-					_format_setting_duration(
-						_focus_duration_seconds()
-					)
-				]
+			_message_with_pet_dialogue(
+				_text(
+					"focus_started",
+					[
+						_format_setting_duration(
+							_focus_duration_seconds()
+						)
+					]
+				),
+				PetDialogueProfileScript.CONTEXT_FOCUS_START
 			),
 			INFORMATION_NOTIFICATION_SECONDS
 		)
@@ -3283,6 +4273,9 @@ func _handle_menu_item(id: int) -> void:
 		MENU_AMBIENT_CARDS:
 			_open_pet_notes_settings()
 			return
+		MENU_PET_DIALOGUE:
+			_toggle_pet_dialogue()
+			return
 		MENU_ALWAYS_ON_TOP:
 			settings.always_on_top = not settings.always_on_top
 			get_window().always_on_top = settings.always_on_top
@@ -3291,6 +4284,9 @@ func _handle_menu_item(id: int) -> void:
 			return
 		MENU_CLEAR_ACTIVITY:
 			activity_stats.clear()
+		MENU_WEATHER_NOW:
+			_show_weather_now()
+			return
 		MENU_START_FOCUS:
 			_start_timer(
 				TimerManagerScript.Kind.FOCUS,
@@ -3344,8 +4340,15 @@ func _handle_menu_item(id: int) -> void:
 				_text("dev_ambient_card_message"),
 				CheckInManagerScript.DEFAULT_DISPLAY_SECONDS
 			)
+		MENU_DEV_WEATHER_CARD:
+			_show_mock_weather_card()
+		MENU_DEV_DAILY_BRIEFING:
+			_show_daily_briefing_preview()
 		MENU_DEV_BEHAVIOR_PREVIEW:
 			_open_behavior_preview()
+			return
+		MENU_DEV_DIALOGUE_PREVIEW:
+			_open_dialogue_preview()
 			return
 		MENU_PAUSE_RESUME_TIMER:
 			_pause_or_resume_timer()
@@ -3663,6 +4666,11 @@ func _update_menu_checks() -> void:
 		activity_menu,
 		MENU_ACTIVITY_SENSING,
 		activity_monitor.listening
+	)
+	_set_menu_checked(
+		settings_menu,
+		MENU_PET_DIALOGUE,
+		bool(settings.pet_dialogue_enabled)
 	)
 	_set_menu_disabled(
 		activity_menu,
@@ -4189,7 +5197,10 @@ func _handle_timer_completed(kind: int) -> void:
 	if kind == TimerManagerScript.Kind.FOCUS:
 		if restoring_timer:
 			_show_confirmation_notification(
-				_text("focus_complete_ready"),
+				_message_with_pet_dialogue(
+					_text("focus_complete_ready"),
+					PetDialogueProfileScript.CONTEXT_FOCUS_COMPLETE
+				),
 				COMPLETION_NOTIFICATION_SECONDS
 			)
 		else:
@@ -4242,13 +5253,94 @@ func _handle_reminder_due(kind: int) -> void:
 func _handle_quiet_state_changed(is_quiet: bool) -> void:
 	_update_reminder_menu()
 	if is_quiet:
-		if _notification_is_actionable():
+		if (
+			_notification_is_actionable()
+			or pet_dialogue_notification_active
+		):
 			_hide_notification()
 		return
 	_show_pending_health_reminder()
 
 
+func _poll_pet_dialogue() -> void:
+	if pet_dialogue_manager == null or not pet_dialogue_manager.idle_is_due():
+		return
+	if not _try_show_pet_dialogue(PetDialogueProfileScript.CONTEXT_IDLE):
+		pet_dialogue_manager.defer_idle(30.0)
+
+
+func _try_show_pet_dialogue(context: StringName) -> bool:
+	if not _can_show_pet_dialogue():
+		return false
+	var line := _request_pet_dialogue_line(context)
+	if line.is_empty():
+		return false
+	_show_notification(line, PET_DIALOGUE_NOTIFICATION_SECONDS)
+	pet_dialogue_notification_active = true
+	return true
+
+
+func _can_show_pet_dialogue() -> bool:
+	return (
+		bool(settings.pet_dialogue_enabled)
+		and pet_window_visible
+		and not shutting_down
+		and pet_dialogue_manager != null
+		and notification_panel != null
+		and not notification_panel.visible
+		and not _focus_is_running()
+		and reminder_manager != null
+		and not reminder_manager.is_quiet_now()
+		and reminder_manager.current_due_kind()
+		== TimerManagerScript.Kind.NONE
+		and not activity_center_window.visible
+		and not duration_settings_window.visible
+		and not quiet_settings_window.visible
+		and not language_settings_window.visible
+		and not pet_notes_settings_window.visible
+		and (context_menu == null or not context_menu.visible)
+		and (check_in_manager == null or not check_in_manager.has_pending())
+		and manual_weather_card.is_empty()
+	)
+
+
+func _request_pet_dialogue_line(context: StringName) -> String:
+	if (
+		pet_dialogue_manager == null
+		or not bool(settings.pet_dialogue_enabled)
+	):
+		return ""
+	var line: String = pet_dialogue_manager.request_line(
+		context,
+		str(settings.language)
+	)
+	return _fit_pet_dialogue_line(line)
+
+
+func _fit_pet_dialogue_line(line: String) -> String:
+	if notification_label == null or line.is_empty():
+		return line
+	return _ellipsize_text_to_width(
+		line,
+		notification_label.get_theme_font("font"),
+		notification_label.get_theme_font_size("font_size"),
+		PET_DIALOGUE_TEXT_WIDTH * settings.display_scale
+	)
+
+
+func _message_with_pet_dialogue(
+	base_message: String,
+	context: StringName
+) -> String:
+	var line := _request_pet_dialogue_line(context)
+	if line.is_empty():
+		return base_message
+	return "%s\n%s" % [base_message, line]
+
+
 func _poll_check_ins() -> void:
+	if _try_show_pending_manual_weather():
+		return
 	if check_in_manager == null or not check_in_manager.is_enabled():
 		return
 	if settings.calendar_notes_enabled:
@@ -4256,37 +5348,139 @@ func _poll_check_ins() -> void:
 	_try_show_check_in()
 
 
-func _handle_calendar_event_ready(event_data: Dictionary) -> void:
+func _start_daily_briefing() -> void:
+	daily_briefing_ready = true
+	_queue_daily_briefing_if_needed(true)
+
+
+func _queue_daily_briefing_if_needed(
+	replace_pending := false
+) -> void:
+	if (
+		daily_briefing_source == null
+		or check_in_manager == null
+		or not settings.ambient_cards_enabled
+		or not settings.daily_briefing_enabled
+		or str(settings.last_daily_briefing_date)
+		== daily_briefing_source.today_key()
+	):
+		return
+	if replace_pending:
+		check_in_manager.remove_source("daily_briefing")
+	var weather := _daily_briefing_weather()
+	var weather_note_id: String = (
+		weather_check_in_source.card_id_for(weather)
+		if not weather.is_empty()
+		else ""
+	)
+	var events: Array[Dictionary] = (
+		latest_calendar_events.duplicate(true)
+		if settings.calendar_notes_enabled
+		else []
+	)
+	daily_briefing_source.publish_today(
+		weather,
+		events,
+		weather_note_id
+	)
+
+
+func _daily_briefing_weather() -> Dictionary:
+	if (
+		not settings.weather_notes_enabled
+		or weather_provider == null
+		or weather_provider.last_weather.is_empty()
+		or not _weather_cache_matches_city(
+			weather_provider.last_weather,
+			str(settings.weather_city)
+		)
+	):
+		return {}
+	var fetched_unix := float(
+		weather_provider.last_weather.get("fetched_unix", 0.0)
+	)
+	var age := Time.get_unix_time_from_system() - fetched_unix
+	if (
+		fetched_unix <= 0.0
+		or age < 0.0
+		or age > DAILY_BRIEFING_WEATHER_MAX_AGE_SECONDS
+	):
+		return {}
+	return weather_provider.last_weather.duplicate(true)
+
+
+func _handle_pet_note_card_ready(card: Dictionary) -> void:
 	if (
 		check_in_manager == null
 		or not check_in_manager.is_enabled()
-		or not settings.calendar_notes_enabled
 	):
 		return
-	var start_unix := float(event_data.get("start_unix", 0.0))
-	var is_all_day := bool(event_data.get("is_all_day", false))
-	var message := _text(
-		"calendar_all_day_card",
-		[str(event_data.get("title", ""))]
+	var source := str(card.get("source", ""))
+	if (
+		source == "daily_briefing"
+		and not settings.daily_briefing_enabled
+	):
+		return
+	if source == "calendar" and not settings.calendar_notes_enabled:
+		return
+	if source == "weather" and not settings.weather_notes_enabled:
+		return
+	if (
+		source == "weather"
+		and str(card.get("id", ""))
+		== str(settings.last_weather_note_id)
+	):
+		return
+	if source == "weather_mock" and not OS.has_feature("editor"):
+		return
+	check_in_manager.enqueue_card_data(card)
+
+
+func _show_mock_weather_card() -> void:
+	if mock_weather_check_in_source == null:
+		return
+	var was_enabled: bool = check_in_manager.is_enabled()
+	if not was_enabled:
+		check_in_manager.set_enabled(true)
+	mock_weather_check_in_source.publish_sample()
+	var card: Dictionary = check_in_manager.take_next(true, false)
+	if not was_enabled:
+		check_in_manager.set_enabled(false)
+	if card.is_empty():
+		return
+	_show_pet_note_card(card)
+
+
+func _show_daily_briefing_preview() -> void:
+	if daily_briefing_source == null:
+		return
+	var weather := _daily_briefing_weather()
+	if weather.is_empty():
+		weather = {
+			"id": 6167865,
+			"name": "Toronto",
+			"temperature_c": 18.0,
+			"weather_code": 2,
+		}
+	var events: Array[Dictionary] = latest_calendar_events.duplicate(true)
+	if events.is_empty():
+		events.append({
+			"id": "daily-briefing-preview",
+			"title": "Design review",
+			"start_unix": Time.get_unix_time_from_system() + 3 * 60 * 60,
+			"end_unix": Time.get_unix_time_from_system() + 4 * 60 * 60,
+			"is_all_day": false,
+		})
+	var card: Dictionary = daily_briefing_source.create_briefing_card(
+		{},
+		weather,
+		events,
+		"",
+		true
 	)
-	if not is_all_day:
-		var remaining_minutes := maxi(
-			1,
-			ceili(
-				(start_unix - Time.get_unix_time_from_system()) / 60.0
-			)
-		)
-		message = _text("calendar_event_card", [
-			str(event_data.get("title", "")),
-			remaining_minutes,
-		])
-	check_in_manager.enqueue_card(
-		"calendar:%s" % str(event_data.get("id", "")),
-		"calendar",
-		message,
-		CheckInManagerScript.DEFAULT_DISPLAY_SECONDS,
-		float(event_data.get("expires_unix", 0.0))
-	)
+	if card.is_empty():
+		return
+	_show_pet_note_card(card)
 
 
 func _handle_google_calendar_state_changed(
@@ -4367,7 +5561,10 @@ func _handle_google_calendar_credential_deleted(
 func _handle_google_calendar_events_updated(
 	events: Array[Dictionary]
 ) -> void:
+	latest_calendar_events = events.duplicate(true)
 	calendar_check_in_source.replace_events(events)
+	if daily_briefing_ready:
+		_queue_daily_briefing_if_needed(true)
 	if (
 		settings.ambient_cards_enabled
 		and settings.calendar_notes_enabled
@@ -4395,8 +5592,17 @@ func _try_show_check_in() -> bool:
 	var card: Dictionary = check_in_manager.take_next()
 	if card.is_empty():
 		return false
+	_show_pet_note_card(card)
+	return true
+
+
+func _show_pet_note_card(card: Dictionary) -> void:
+	var source := str(card.get("source", ""))
+	var message := _resolve_pet_note_message(card)
+	if source == "daily_briefing":
+		message = _fit_daily_briefing_message(message)
 	_show_ambient_card(
-		str(card.get("message", "")),
+		message,
 		int(
 			card.get(
 				"display_seconds",
@@ -4404,7 +5610,132 @@ func _try_show_check_in() -> bool:
 			)
 		)
 	)
-	return true
+	var metadata = card.get("metadata", {})
+	if not metadata is Dictionary:
+		return
+	if bool(metadata.get("is_preview", false)):
+		return
+	var settings_changed := false
+	if source == "daily_briefing":
+		var date_key := str(
+			metadata.get("date_key", "")
+		).strip_edges()
+		if (
+			not date_key.is_empty()
+			and date_key != settings.last_daily_briefing_date
+		):
+			settings.last_daily_briefing_date = date_key
+			settings_changed = true
+		var briefing_weather_id := str(
+			metadata.get("weather_note_id", "")
+		).strip_edges()
+		if (
+			bool(metadata.get("includes_weather", false))
+			and not briefing_weather_id.is_empty()
+			and briefing_weather_id != settings.last_weather_note_id
+		):
+			settings.last_weather_note_id = briefing_weather_id
+			settings_changed = true
+			check_in_manager.remove_source("weather")
+	elif source == "weather":
+		var weather_note_id := str(card.get("id", "")).strip_edges()
+		if (
+			not weather_note_id.is_empty()
+			and weather_note_id != settings.last_weather_note_id
+		):
+			settings.last_weather_note_id = weather_note_id
+			settings_changed = true
+	if settings_changed:
+		_save_settings()
+
+
+func _fit_daily_briefing_message(message: String) -> String:
+	if notification_label == null:
+		return message
+	var font: Font = notification_label.get_theme_font("font")
+	var font_size: int = notification_label.get_theme_font_size(
+		"font_size"
+	)
+	var max_width: float = (
+		DAILY_BRIEFING_TEXT_WIDTH * settings.display_scale
+	)
+	var source_lines: PackedStringArray = message.split("\n", false)
+	var fitted_lines: Array[String] = []
+	for index in mini(3, source_lines.size()):
+		fitted_lines.append(
+			_ellipsize_text_to_width(
+				str(source_lines[index]),
+				font,
+				font_size,
+				max_width
+			)
+		)
+	return "\n".join(fitted_lines)
+
+
+func _ellipsize_text_to_width(
+	text: String,
+	font: Font,
+	font_size: int,
+	max_width: float
+) -> String:
+	var compact := text.strip_edges().replace("\n", " ")
+	if (
+		font == null
+		or font.get_string_size(
+			compact,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1.0,
+			font_size
+		).x <= max_width
+	):
+		return compact
+	var ellipsis := "…"
+	var low := 0
+	var high := compact.length()
+	while low < high:
+		var middle := ceili((low + high) / 2.0)
+		var candidate := compact.left(middle).strip_edges() + ellipsis
+		var candidate_width := font.get_string_size(
+			candidate,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1.0,
+			font_size
+		).x
+		if candidate_width <= max_width:
+			low = middle
+		else:
+			high = middle - 1
+	return compact.left(low).strip_edges() + ellipsis
+
+
+func _resolve_pet_note_message(card: Dictionary) -> String:
+	var message_key := str(card.get("message_key", "")).strip_edges()
+	if not message_key.is_empty():
+		var format_args = card.get("format_args", [])
+		if format_args is Array:
+			return _text(message_key, format_args)
+		return _text(message_key)
+	var localized_messages = card.get("localized_messages", {})
+	if localized_messages is Dictionary:
+		var language := str(settings.language)
+		var localized := str(
+			localized_messages.get(language, "")
+		).strip_edges()
+		if localized.is_empty():
+			localized = str(
+				localized_messages.get(
+					AppLocalizationScript.ENGLISH,
+					""
+				)
+			).strip_edges()
+		if localized.is_empty() and not localized_messages.is_empty():
+			localized = str(
+				localized_messages.values()[0]
+			).strip_edges()
+		if not localized.is_empty():
+			return localized
+	return str(card.get("message", "")).strip_edges()
 
 
 func _toggle_reminder(kind: int) -> void:
@@ -4453,12 +5784,15 @@ func _handle_complete_reminder() -> void:
 	)
 	if not _show_pending_health_reminder():
 		_show_notification(
-			_text("completed_next", [
-				_reminder_kind_name(kind).to_lower(),
-				_format_setting_duration(
-					reminder_manager.interval_seconds(kind)
-				),
-			]),
+			_message_with_pet_dialogue(
+				_text("completed_next", [
+					_reminder_kind_name(kind).to_lower(),
+					_format_setting_duration(
+						reminder_manager.interval_seconds(kind)
+					),
+				]),
+				PetDialogueProfileScript.CONTEXT_REMINDER_DONE
+			),
 			INFORMATION_NOTIFICATION_SECONDS
 		)
 
@@ -4539,6 +5873,9 @@ func _focus_is_running() -> bool:
 
 func _begin_auto_break_countdown() -> void:
 	_cancel_auto_transition(false)
+	auto_transition_dialogue_line = _request_pet_dialogue_line(
+		PetDialogueProfileScript.CONTEXT_FOCUS_COMPLETE
+	)
 	notification_panel.visible = false
 	_set_notification_actions(TimerManagerScript.Kind.NONE)
 	notification_confirmation_active = true
@@ -4580,14 +5917,18 @@ func _handle_auto_transition_tick() -> void:
 
 func _update_auto_break_countdown() -> void:
 	var remaining := _auto_transition_remaining_seconds()
-	notification_label.text = _text(
+	var message := _text(
 		"focus_break_countdown",
 		[remaining]
 	)
+	if not auto_transition_dialogue_line.is_empty():
+		message += "\n" + auto_transition_dialogue_line
+	notification_label.text = message
 	_update_timer_menu()
 
 
 func _cancel_auto_transition(show_ready_message: bool) -> void:
+	var completion_dialogue := auto_transition_dialogue_line
 	auto_transition_deadline_unix = 0.0
 	if auto_transition_timer != null:
 		auto_transition_timer.stop()
@@ -4597,10 +5938,18 @@ func _cancel_auto_transition(show_ready_message: bool) -> void:
 		and timer_manager.state == TimerManagerScript.State.WAITING_NEXT
 		and timer_manager.next_kind == TimerManagerScript.Kind.BREAK
 	):
+		if completion_dialogue.is_empty():
+			completion_dialogue = _request_pet_dialogue_line(
+				PetDialogueProfileScript.CONTEXT_FOCUS_COMPLETE
+			)
+		var ready_message := _text("focus_complete_ready")
+		if not completion_dialogue.is_empty():
+			ready_message += "\n" + completion_dialogue
 		_show_confirmation_notification(
-			_text("focus_complete_ready"),
+			ready_message,
 			COMPLETION_NOTIFICATION_SECONDS
 		)
+	auto_transition_dialogue_line = ""
 	_update_timer_menu()
 
 
@@ -4626,6 +5975,7 @@ func _auto_transition_remaining_seconds() -> int:
 
 
 func _show_notification(message: String, duration_seconds: float) -> void:
+	pet_dialogue_notification_active = false
 	notification_panel.visible = false
 	_set_notification_actions(TimerManagerScript.Kind.NONE)
 	notification_label.text = message
@@ -4782,6 +6132,7 @@ func _notification_is_actionable() -> bool:
 
 
 func _hide_notification() -> void:
+	pet_dialogue_notification_active = false
 	if notification_timer != null:
 		notification_timer.stop()
 	if notification_panel != null:
@@ -4824,6 +6175,18 @@ func _activity_summary() -> String:
 		activity_stats.keyboard_count,
 		activity_stats.mouse_count,
 	])
+
+
+func _toggle_pet_dialogue() -> void:
+	settings.pet_dialogue_enabled = not bool(
+		settings.pet_dialogue_enabled
+	)
+	if pet_dialogue_manager != null:
+		pet_dialogue_manager.set_enabled(settings.pet_dialogue_enabled)
+	if not settings.pet_dialogue_enabled and pet_dialogue_notification_active:
+		_hide_notification()
+	_update_menu_checks()
+	_save_settings()
 
 
 func _toggle_activity_sensing() -> void:
@@ -4982,6 +6345,11 @@ func _refresh_localized_ui() -> void:
 		_text("clear_activity")
 	)
 	_set_menu_text(
+		activity_menu,
+		MENU_WEATHER_NOW,
+		_text("weather_now")
+	)
+	_set_menu_text(
 		window_menu,
 		MENU_ALWAYS_ON_TOP,
 		_text("always_on_top")
@@ -5019,6 +6387,11 @@ func _refresh_localized_ui() -> void:
 		settings_menu,
 		MENU_AMBIENT_CARDS,
 		_text("ambient_cards")
+	)
+	_set_menu_text(
+		settings_menu,
+		MENU_PET_DIALOGUE,
+		_text("pet_dialogue_enabled")
 	)
 	_set_menu_text(context_menu, MENU_ACTIVITY_SUBMENU, _text("activity"))
 	_set_menu_text(
@@ -5058,8 +6431,23 @@ func _refresh_localized_ui() -> void:
 		)
 		_set_menu_text(
 			developer_menu,
+			MENU_DEV_WEATHER_CARD,
+			_text("dev_weather_card")
+		)
+		_set_menu_text(
+			developer_menu,
+			MENU_DEV_DAILY_BRIEFING,
+			_text("dev_daily_briefing")
+		)
+		_set_menu_text(
+			developer_menu,
 			MENU_DEV_BEHAVIOR_PREVIEW,
 			_text("dev_behavior_preview")
+		)
+		_set_menu_text(
+			developer_menu,
+			MENU_DEV_DIALOGUE_PREVIEW,
+			_text("dev_dialogue_preview")
 		)
 		_set_menu_text(
 			context_menu,
@@ -5067,6 +6455,7 @@ func _refresh_localized_ui() -> void:
 			_text("developer")
 		)
 		_refresh_behavior_preview_state()
+		_refresh_dialogue_preview_state()
 	_refresh_duration_settings_texts()
 	_refresh_activity_center_texts()
 	_refresh_quiet_settings_texts()
@@ -5101,6 +6490,9 @@ func _load_settings() -> void:
 	settings.selected_pet_id = str(
 		config.get_value("pet", "selected_pet_id", String(DEFAULT_PET_ID))
 	)
+	settings.pet_dialogue_enabled = bool(
+		config.get_value("dialogue", "enabled", true)
+	)
 	settings.activity_consent_shown = bool(
 		config.get_value("activity", "consent_shown", false)
 	)
@@ -5114,12 +6506,65 @@ func _load_settings() -> void:
 			false
 		)
 	)
+	settings.daily_briefing_enabled = bool(
+		config.get_value(
+			"check_ins",
+			"daily_briefing_enabled",
+			config.get_value(
+				"check_ins",
+				"date_notes_enabled",
+				true
+			)
+		)
+	)
+	settings.last_daily_briefing_date = str(
+		config.get_value(
+			"check_ins",
+			"last_daily_briefing_date",
+			config.get_value(
+				"check_ins",
+				"last_date_note_date",
+				""
+			)
+		)
+	)
+	settings.last_weather_note_id = str(
+		config.get_value(
+			"check_ins",
+			"last_weather_note_id",
+			""
+		)
+	)
 	settings.calendar_notes_enabled = bool(
 		config.get_value(
 			"check_ins",
 			"calendar_notes_enabled",
 			false
 		)
+	)
+	settings.weather_notes_enabled = bool(
+		config.get_value(
+			"check_ins",
+			"weather_notes_enabled",
+			false
+		)
+	)
+	settings.weather_city = str(
+		config.get_value(
+			"check_ins",
+			"weather_city",
+			""
+		)
+	).strip_edges()
+	var saved_weather = config.get_value(
+		"check_ins",
+		"weather_snapshot",
+		{}
+	)
+	settings.weather_snapshot = (
+		saved_weather
+		if saved_weather is Dictionary
+		else {}
 	)
 	settings.google_calendar_explicitly_disconnected = bool(
 		config.get_value(
@@ -5204,6 +6649,7 @@ func _save_settings() -> void:
 	config.set_value("window", "always_on_top", settings.always_on_top)
 	config.set_value("window", "display_scale", settings.display_scale)
 	config.set_value("pet", "selected_pet_id", settings.selected_pet_id)
+	config.set_value("dialogue", "enabled", settings.pet_dialogue_enabled)
 	config.set_value("interface", "language", settings.language)
 	config.set_value(
 		"timer_defaults",
@@ -5232,8 +6678,38 @@ func _save_settings() -> void:
 	)
 	config.set_value(
 		"check_ins",
+		"daily_briefing_enabled",
+		settings.daily_briefing_enabled
+	)
+	config.set_value(
+		"check_ins",
+		"last_daily_briefing_date",
+		settings.last_daily_briefing_date
+	)
+	config.set_value(
+		"check_ins",
+		"last_weather_note_id",
+		settings.last_weather_note_id
+	)
+	config.set_value(
+		"check_ins",
 		"calendar_notes_enabled",
 		settings.calendar_notes_enabled
+	)
+	config.set_value(
+		"check_ins",
+		"weather_notes_enabled",
+		settings.weather_notes_enabled
+	)
+	config.set_value(
+		"check_ins",
+		"weather_city",
+		settings.weather_city
+	)
+	config.set_value(
+		"check_ins",
+		"weather_snapshot",
+		settings.weather_snapshot
 	)
 	config.set_value(
 		"check_ins",

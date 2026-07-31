@@ -103,6 +103,11 @@
 - “活动中心 / Activity Center”可从宠物右键菜单或 Windows 托盘打开，以状态卡片集中显示专注、喝水、站立和勿扰时段，并处理常用操作
 - 活动中心显示待处理提醒数量和本次运行最近 5 条 Focus/Break 与健康提醒事件；最近活动可手动清除，退出程序后自动清空
 - 可选的“宠物小纸条 / Pet Notes”会在非专注、非勿扰且没有待处理提醒时显示在宠物图片上；`OK` 按钮显示关闭倒计时，也可手动关闭
+- 启用 Pet Notes 后，每个本地日期第一次启动会生成一张最多三行的每日简报：第一行把简短的早上好、下午好或晚上好与日期合并，下面按可用性各保留一行天气和下一项日历事件；每行会按当前字体和缩放比例独立省略，长事件标题不会产生隐藏的第四行；缺少的数据自动省略，成功显示后当天不再重复
+- Pet Notes 信息源使用统一标准卡片契约；日历已迁移，Developer 菜单提供不联网的双语模拟天气入口，用于测试来源、优先级队列、本地化和气泡显示
+- 天气支持手动城市、主动查看、每三小时自动刷新和最近成功结果缓存；不请求系统定位，也不保存 Open-Meteo 返回的经纬度
+- 数据驱动的本地预写对白第一阶段：Leo、Bobo、Mable 与 Milo 可在点击、开始/完成 Focus、完成健康提醒和低频空闲时使用各自性格的简短对白；对白 ID 与宠物包内语言资源分离，新增语言无需修改核心代码，全局与场景冷却避免重复打扰
+- `Settings` 可随时关闭宠物对白；编辑器 Developer 菜单提供按当前宠物包动态生成的对白预览窗口，预览不消耗正常冷却
 - 菜单、宠物气泡和系统对话框支持 English / 简体中文，并保存语言选择
 
 ## 活动感应与隐私
@@ -215,7 +220,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 - 提醒气泡自动收起后，左键短按宠物可再次打开当前待处理提醒
 - `Developer` 子菜单中的喝水和站立 `1 sec (test)`：快速验证两种健康提醒；正式导出时隐藏
 - `Settings` → `Language…`：打开独立语言选择窗口；首次安装跟随 Windows 系统语言，无法识别时回退 English；当前支持 English 和简体中文，选择会在重启后恢复
-- `Settings` → `Pet Notes…`：设置非专注时的宠物小纸条，并连接、同步或断开用户自己的 Google Calendar
+- `Settings` → `Pet Notes…`：设置非专注时的宠物小纸条；可启用每日简报，连接、同步或断开用户自己的 Google Calendar，也可开启 `Show automatic weather notes / 自动显示天气小纸条`、手动填写城市并点击 `Check now / 立即检查`
+- `Activity` → `Weather now / 查看天气`：主动在宠物图片上查看天气。此入口不要求开启 Pet Notes 或自动天气；没有城市时会打开设置，30 分钟内的缓存直接显示，较旧时联网刷新
+- 主动天气不受六小时自动小纸条冷却限制；如果健康提醒正在显示，天气会等待到提醒关闭后再出现
+- 天气获取使用 Open-Meteo 的地理编码与天气预报接口。成功结果最多每六小时自动生成一张低优先级小纸条；若同一时段的天气已经包含在每日简报中则不再单独显示，跨重启也保持该去重状态。日历事件仍优先显示，断网不会清空最近的成功天气
+- 城市名与不含经纬度的天气快照保存在本地设置中；程序不读取 Windows 定位。天气正文和设置页均保留 Open-Meteo attribution
+- Open-Meteo 免费公开接口适合当前非商业原型；Steam 或其他商业发布前，需要改用符合商业使用条款的 Open-Meteo 方案或替换提供者。端点封装在独立 provider 中，业务队列与界面无需绑定具体服务
 - Google Calendar 登录在系统浏览器完成，只申请日历列表与事件只读权限；同步层计划每 15 分钟刷新未来三天事件
 - Google Calendar 使用 Desktop OAuth client、PKCE、随机 `state` 和 loopback 回调；该 Desktop client 的 token 交换要求其配套 client secret
 - Godot 编辑器开发环境从项目根目录中被 Git 忽略的 `client_secret*.json` 加载配置；正式 Windows 导出通过插件把同一 Installed client 配置注入发行包，普通用户无需复制 JSON
@@ -254,8 +264,18 @@ src/timers/reminder_manager.gd    喝水/站立周期、延后、按日暂停和
 src/localization/app_localization.gd
                                   英语/简体中文用户界面词典与语言回退
 src/checkins/check_in_manager.gd  小纸条队列、去重、过期、冷却与显示时长
+src/checkins/pet_note_card.gd     统一小纸条字段、校验和规范化
+src/checkins/pet_note_source.gd   日历、天气和新闻共用的信息源契约
 src/checkins/calendar_check_in_source.gd
                                   定时/全天日历事件的小纸条触发
+src/checkins/daily_briefing_source.gd
+                                  简短问候、日期、天气和下一事件的每日聚合简报
+src/checkins/mock_weather_check_in_source.gd
+                                  不联网的双语模拟天气开发测试源
+src/checkins/open_meteo_weather_provider.gd
+                                  城市解析、实时/当日天气获取与离线缓存恢复
+src/checkins/weather_check_in_source.gd
+                                  双语天气内容、六小时去重、优先级与 attribution
 src/checkins/google_calendar_provider.gd
                                   Google Desktop OAuth、只读同步与事件标准化
 src/checkins/google_oauth_client_config.gd
@@ -280,6 +300,10 @@ src/pets/pet_definition.gd        宠物资源格式
 src/pets/pet_behavior_definition.gd
                                   通用多帧行为、触发、播放与选择参数
 src/pets/pet_behavior_profile.gd  版本一标准行为清单与资源预算校验
+src/pets/pet_dialogue_entry.gd    单个上下文的稳定对白 ID 与冷却
+src/pets/pet_dialogue_locale.gd   可自动发现的单语言对白字典
+src/pets/pet_dialogue_profile.gd  版本化对白 ID、语言发现与英语回退
+src/pets/pet_dialogue_manager.gd  语言选择、去重、冷却与低频空闲调度
 src/pets/pet_registry.gd          自动发现、校验和排序宠物包
 src/pets/pet_visual.gd            所有宠物共用的显示、行为调度与安全回退
 docs/宠物行为生成流程.md           照片到标准行为包的版本化生产流程
@@ -306,10 +330,15 @@ tests/activity_center_integration_test.gd
 tests/activity_center_session_log_test.gd
                                   会话事件白名单、5 条上限、深拷贝与清除自测
 tests/pet_behavior_system_test.gd 多帧播放、标准档案、优先级、Focus 与回退自测
+tests/pet_dialogue_manager_test.gd 对白档案、语言、去重、冷却与空闲调度自测
+tests/pet_dialogue_integration_test.gd 点击/Focus、优先级、开关与四宠物预览自测
 tests/localization_test.gd         本地化目录完整性、语言回退与格式化自测
 tests/check_in_manager_test.gd     小纸条队列、过期与日历触发规则自测
+tests/pet_note_source_test.gd      标准卡片、来源约束、优先级与模拟天气自测
+tests/daily_briefing_integration_test.gd 每日简报、三行上限、英中问候与持久去重自测
+tests/weather_provider_test.gd     城市/天气响应解析、缓存和天气卡片规则自测
 tests/ambient_card_integration_test.gd
-                                  图片内小纸条、倒计时、关闭与专注抑制集成自测
+                                  图片内小纸条、天气设置/预览、倒计时与抑制集成自测
 tests/google_calendar_provider_test.gd
                                   PKCE、回调解析、时区与 Google 事件标准化自测
 tests/windows_credential_store_test.gd

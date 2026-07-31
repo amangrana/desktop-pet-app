@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="PetDialogueLocale" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/pets/pet_dialogue_locale.gd" id="1_locale"]
+
+[resource]
+script = ExtResource("1_locale")
+locale_code = "zh_CN"
+translations = {
+"bobo.click.01": "你好呀，很高兴你过来看看我。",
+"bobo.click.02": "轻轻摸一下总是很舒服。",
+"bobo.click.03": "被你找到啦，我刚才就在旁边休息。",
+"bobo.click.04": "我可以给你留一点位置。",
+"bobo.focus_start.01": "慢慢来，我会让这里安静一点。",
+"bobo.focus_start.02": "我会安静地陪在你身边。",
+"bobo.focus_complete.01": "做得很好，趁安静休息一下吧。",
+"bobo.focus_complete.02": "完成得很漂亮，现在休息吧。",
+"bobo.reminder_done.01": "很好，小小的照顾也很重要。",
+"bobo.reminder_done.02": "好多了，记得继续照顾好自己。",
+"bobo.idle.01": "今天的房间感觉很安静。",
+"bobo.idle.02": "就算看起来睡着了，我也在听。",
+"bobo.idle.03": "我们可以一起安静地待一会儿。"
+}
