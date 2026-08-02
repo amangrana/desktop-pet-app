@@ -10,8 +10,14 @@ const WindowsActivityAdapterScript := preload(
 const WindowsTaskbarAdapterScript := preload(
 	"res://src/platform/windows/windows_taskbar_adapter.gd"
 )
+const WindowsFullscreenAdapterScript := preload(
+	"res://src/platform/windows/windows_fullscreen_adapter.gd"
+)
 const WindowsCredentialStoreScript := preload(
 	"res://src/platform/windows/windows_credential_store.gd"
+)
+const SingleInstanceCoordinatorScript := preload(
+	"res://src/platform/single_instance_coordinator.gd"
 )
 const TimerManagerScript := preload("res://src/timers/timer_manager.gd")
 const ReminderManagerScript := preload(
@@ -63,7 +69,7 @@ const CHECKBOX_UNCHECKED_ICON_PATH := (
 	"res://assets/ui/checkbox_unchecked.svg"
 )
 const CHECKBOX_CHECKED_ICON_PATH := "res://assets/ui/checkbox_checked.svg"
-const TRAY_ICON_PATH := "res://assets/ui/tray_icon.svg"
+const TRAY_ICON_PATH := "res://assets/ui/desktop_pet_icon.png"
 
 const BASE_WINDOW_SIZE := 360
 const DISPLAY_SCALE_MIN := 0.75
@@ -311,6 +317,8 @@ var activity_stats
 var activity_center_log
 var activity_adapter
 var windows_taskbar_adapter
+var windows_fullscreen_adapter
+var single_instance_coordinator
 var timer_manager
 var reminder_manager
 var check_in_manager
@@ -372,6 +380,9 @@ var google_calendar_credential_action := ""
 var google_oauth_browser_handoff_active := false
 var google_oauth_restore_always_on_top := false
 var google_oauth_reopen_pet_notes := false
+var external_fullscreen_active := false
+var external_fullscreen_state_known := false
+var fullscreen_detection_test_mode := false
 var recovered_legacy_test_settings := false
 var duration_settings_resize_queued := false
 var duration_settings_base_note_height := -1
@@ -387,9 +398,32 @@ var latest_calendar_events: Array[Dictionary] = []
 var daily_briefing_ready := false
 var auto_transition_dialogue_line := ""
 var pet_dialogue_notification_active := false
+var secondary_instance := false
+var startup_complete := false
+var pending_instance_activation := false
+
+
+func _enter_tree() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	single_instance_coordinator = SingleInstanceCoordinatorScript.new()
+	single_instance_coordinator.activation_requested.connect(
+		_handle_single_instance_activation
+	)
+	add_child(single_instance_coordinator)
+	secondary_instance = (
+		single_instance_coordinator.start()
+		== SingleInstanceCoordinatorScript.StartResult.SECONDARY
+	)
+	if secondary_instance:
+		get_window().visible = false
 
 
 func _ready() -> void:
+	if secondary_instance:
+		shutting_down = true
+		get_tree().quit()
+		return
 	pet.visual_shape_changed.connect(_handle_pet_visual_shape_changed)
 	_load_settings()
 	_build_activity_pipeline()
@@ -404,6 +438,7 @@ func _ready() -> void:
 		return
 	_select_initial_pet()
 	_configure_window()
+	_build_fullscreen_pipeline()
 	_build_hud()
 	_build_activity_center_window()
 	_build_duration_settings_window()
@@ -422,6 +457,27 @@ func _ready() -> void:
 	restoring_saved_state = false
 	_update_menu_checks()
 	_start_preview_capture_if_requested()
+	startup_complete = true
+	if pending_instance_activation:
+		_present_existing_instance.call_deferred()
+
+
+func _handle_single_instance_activation() -> void:
+	if shutting_down:
+		return
+	pending_instance_activation = true
+	if startup_complete:
+		_present_existing_instance()
+
+
+func _present_existing_instance() -> void:
+	if shutting_down or not startup_complete:
+		return
+	pending_instance_activation = false
+	_set_pet_window_visible(true)
+	if not (external_fullscreen_state_known and external_fullscreen_active):
+		DisplayServer.window_move_to_foreground()
+	_apply_effective_always_on_top()
 
 
 func _handle_pet_visual_shape_changed() -> void:
@@ -780,11 +836,99 @@ func _configure_window() -> void:
 	window.title = _text("window_title", [pet.get_display_name()])
 	window.borderless = true
 	window.transparent = true
-	window.always_on_top = settings.always_on_top
+	window.always_on_top = _should_enable_always_on_top()
 	window.unresizable = true
 	get_viewport().transparent_bg = true
 	windows_taskbar_adapter = WindowsTaskbarAdapterScript.new()
 	_schedule_taskbar_button_hide()
+
+
+func _build_fullscreen_pipeline() -> void:
+	windows_fullscreen_adapter = WindowsFullscreenAdapterScript.new()
+	windows_fullscreen_adapter.fullscreen_changed.connect(
+		_handle_external_fullscreen_changed
+	)
+	windows_fullscreen_adapter.state_changed.connect(
+		_handle_fullscreen_adapter_state
+	)
+	add_child(windows_fullscreen_adapter)
+	if settings.always_on_top:
+		_start_fullscreen_detection()
+	else:
+		_apply_effective_always_on_top()
+
+
+func _start_fullscreen_detection() -> void:
+	external_fullscreen_active = false
+	if not _uses_windows_fullscreen_detection():
+		external_fullscreen_state_known = true
+		_apply_effective_always_on_top()
+		return
+	external_fullscreen_state_known = false
+	_apply_effective_always_on_top()
+	if (
+		windows_fullscreen_adapter == null
+		or not windows_fullscreen_adapter.start()
+	):
+		external_fullscreen_state_known = true
+		external_fullscreen_active = false
+		_apply_effective_always_on_top()
+
+
+func _stop_fullscreen_detection() -> void:
+	if windows_fullscreen_adapter != null:
+		windows_fullscreen_adapter.stop()
+	external_fullscreen_state_known = false
+	external_fullscreen_active = false
+	_apply_effective_always_on_top()
+
+
+func _handle_external_fullscreen_changed(active: bool) -> void:
+	external_fullscreen_state_known = true
+	external_fullscreen_active = active
+	if OS.has_feature("editor"):
+		print("Desktop Pet fullscreen state: ", active)
+	_apply_effective_always_on_top()
+
+
+func _handle_fullscreen_adapter_state(state: int, message: String) -> void:
+	if state != WindowsFullscreenAdapterScript.State.ERROR:
+		return
+	push_warning(message)
+	external_fullscreen_state_known = true
+	external_fullscreen_active = false
+	_apply_effective_always_on_top()
+
+
+func _uses_windows_fullscreen_detection() -> bool:
+	return (
+		fullscreen_detection_test_mode
+		or (
+			OS.get_name() == "Windows"
+			and DisplayServer.get_name() != "headless"
+		)
+	)
+
+
+func _should_enable_always_on_top() -> bool:
+	if (
+		not bool(settings.always_on_top)
+		or google_oauth_browser_handoff_active
+	):
+		return false
+	if not _uses_windows_fullscreen_detection():
+		return true
+	return (
+		external_fullscreen_state_known
+		and not external_fullscreen_active
+	)
+
+
+func _apply_effective_always_on_top() -> void:
+	var should_be_topmost := _should_enable_always_on_top()
+	get_window().always_on_top = should_be_topmost
+	if should_be_topmost and windows_fullscreen_adapter != null:
+		windows_fullscreen_adapter.enforce_topmost()
 
 
 func _schedule_taskbar_button_hide() -> void:
@@ -2794,11 +2938,11 @@ func _style_settings_button(
 
 func _style_settings_checkbox(check_box: CheckBox) -> void:
 	if checkbox_unchecked_icon == null:
-		checkbox_unchecked_icon = _load_svg_texture(
+		checkbox_unchecked_icon = _load_icon_texture(
 			CHECKBOX_UNCHECKED_ICON_PATH
 		)
 	if checkbox_checked_icon == null:
-		checkbox_checked_icon = _load_svg_texture(
+		checkbox_checked_icon = _load_icon_texture(
 			CHECKBOX_CHECKED_ICON_PATH
 		)
 	check_box.custom_minimum_size.y = 32
@@ -2872,7 +3016,7 @@ func _style_settings_line_edit(line_edit: LineEdit) -> void:
 	line_edit.add_theme_stylebox_override("read_only", read_only)
 
 
-func _load_svg_texture(path: String) -> Texture2D:
+func _load_icon_texture(path: String) -> Texture2D:
 	var imported_texture := load(path) as Texture2D
 	if imported_texture != null:
 		return imported_texture
@@ -3047,18 +3191,17 @@ func _begin_google_oauth_browser_handoff() -> void:
 		pet_notes_settings_window != null
 		and pet_notes_settings_window.visible
 	)
-	var root_window := get_window()
 	google_oauth_restore_always_on_top = bool(settings.always_on_top)
 	if google_oauth_reopen_pet_notes:
 		pet_notes_settings_window.hide()
-	root_window.always_on_top = false
+	_apply_effective_always_on_top()
 
 
 func _end_google_oauth_browser_handoff() -> void:
 	if not google_oauth_browser_handoff_active:
 		return
 	google_oauth_browser_handoff_active = false
-	get_window().always_on_top = google_oauth_restore_always_on_top
+	_apply_effective_always_on_top()
 	var should_reopen := (
 		google_oauth_reopen_pet_notes
 		and not shutting_down
@@ -4065,7 +4208,7 @@ func _build_system_tray() -> void:
 		return
 	tray_indicator = StatusIndicator.new()
 	tray_indicator.name = "DesktopPetTray"
-	tray_indicator.icon = _load_svg_texture(TRAY_ICON_PATH)
+	tray_indicator.icon = _load_icon_texture(TRAY_ICON_PATH)
 	tray_indicator.tooltip = _text(
 		"tray_tooltip",
 		[pet.get_display_name()]
@@ -4278,7 +4421,10 @@ func _handle_menu_item(id: int) -> void:
 			return
 		MENU_ALWAYS_ON_TOP:
 			settings.always_on_top = not settings.always_on_top
-			get_window().always_on_top = settings.always_on_top
+			if settings.always_on_top:
+				_start_fullscreen_detection()
+			else:
+				_stop_fullscreen_detection()
 		MENU_ACTIVITY_SENSING:
 			_toggle_activity_sensing()
 			return

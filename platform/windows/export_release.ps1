@@ -84,6 +84,12 @@ $helperPaths = @(
             "platform\windows\taskbar_helper\" +
             "DesktopPetTaskbarHelper.exe"
         )
+    ),
+    (
+        Join-Path $projectRoot (
+            "platform\windows\fullscreen_helper\" +
+            "DesktopPetFullscreenHelper.exe"
+        )
     )
 )
 foreach ($helperPath in $helperPaths) {
@@ -106,6 +112,7 @@ $releaseFilenames = @(
     "DesktopPetActivityHelper.exe",
     "DesktopPetCredentialHelper.exe",
     "DesktopPetTaskbarHelper.exe",
+    "DesktopPetFullscreenHelper.exe",
     "DesktopPet.tmp"
 )
 foreach ($filename in $releaseFilenames) {

@@ -36,23 +36,44 @@ func _run() -> void:
 		"the tray menu must expose the core desktop-pet actions"
 	)
 	_expect(
-		FileAccess.file_exists("res://assets/ui/tray_icon.svg"),
-		"the Windows tray icon asset must exist"
-	)
-	var tray_icon: Texture2D = main._load_svg_texture(
-		"res://assets/ui/tray_icon.svg"
+		ProjectSettings.get_setting("application/config/icon", "")
+		== "res://assets/ui/desktop_pet_icon.png"
+		and ProjectSettings.get_setting(
+			"application/config/windows_native_icon",
+			""
+		) == "res://assets/ui/desktop_pet_icon.ico"
+		and FileAccess.file_exists("res://assets/ui/desktop_pet_icon.png")
+		and FileAccess.file_exists("res://assets/ui/desktop_pet_icon.ico"),
+		(
+			"the project and exported Windows app must use the custom "
+			+ "Desktop Pet icon"
+		)
 	)
 	_expect(
-		tray_icon != null and tray_icon.get_size() == Vector2(64, 64),
+		main.TRAY_ICON_PATH == "res://assets/ui/desktop_pet_icon.png",
+		"the Windows tray must reuse the branded application icon"
+	)
+	var tray_icon: Texture2D = main._load_icon_texture(
+		main.TRAY_ICON_PATH
+	)
+	_expect(
+		tray_icon != null
+		and tray_icon.get_width() == tray_icon.get_height()
+		and tray_icon.get_width() >= 256,
 		(
-			"the Windows tray icon must load through the imported texture "
-			+ "path, including in exported PCK builds"
+			"the shared application/tray icon must load as a sufficiently "
+			+ "large square imported texture, including in exported PCK builds"
 		)
 	)
 	_expect(
 		main.windows_taskbar_adapter != null
 		and main.windows_taskbar_adapter.helper_exists(),
 		"the safe Windows taskbar button helper must be packaged"
+	)
+	_expect(
+		main.windows_fullscreen_adapter != null
+		and main.windows_fullscreen_adapter.helper_exists(),
+		"the anonymous Windows fullscreen helper must be packaged"
 	)
 	_expect(
 		main.window_menu.get_item_index(MENU_SCALE_300) >= 0,
@@ -94,6 +115,16 @@ func _run() -> void:
 	_expect(
 		main.pet_window_visible,
 		"the tray action must be able to restore the pet"
+	)
+	main._set_pet_window_visible(false)
+	main._handle_single_instance_activation()
+	_expect(
+		main.pet_window_visible
+		and not main.pending_instance_activation,
+		(
+			"launching Desktop Pet again must restore the existing pet "
+			+ "instead of leaving it hidden in the tray"
+		)
 	)
 
 	main.shutting_down = true
