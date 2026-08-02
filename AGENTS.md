@@ -55,14 +55,19 @@
 - 多部位触摸互动已记录为后续功能；未来必须通过宠物包配置区域、动作 ID、优先级和冷却，不在核心代码中写死部位或坐标。
 - Google Calendar 只读同步与安全持久登录已接入：Desktop OAuth Authorization Code + PKCE、系统浏览器、随机 loopback 回调、未来三天事件同步和 15 分钟自动刷新。开发版自动读取项目根目录中被 Git 忽略的 `client_secret*.json`，校验 Installed/Desktop 客户端 ID，并将密钥用于 token 交换；refresh token 通过专用 helper 保存到当前用户的 Windows Credential Manager，access token 只保留在内存，二者都不得进入普通设置、日志或公开仓库。主动断开会先持久禁止自动恢复，再异步删除凭据；即使立即退出，下次启动也不得恢复旧 token，并应继续清理残留。新授权成功才解除保护；`invalid_grant` 同样进入主动断开状态。
 - Windows 系统托盘第一阶段已完成：托盘菜单支持显示/隐藏宠物、开始专注、打开 Pet Notes 和退出；完整活动托盘仍是后续功能。
+- Desktop Pet 采用本机单实例协调：首次启动只绑定 `127.0.0.1` 固定 UDP 端口；重复启动在建立计时、提醒或账户状态前隐藏并退出，只向已运行实例发送固定的显示命令。已运行宠物若在托盘隐藏则恢复，并在不违反全屏避让时请求前台显示；协议不得携带窗口标题、进程名或用户内容。
+- Godot 默认启动 Logo 已关闭，启动背景保持完全透明；不得在宠物出现前重新引入引擎品牌启动窗口或不透明占位背景。
+- Desktop Pet 应用图标使用 Leo 友善开心的卡通头像：明亮柔和的棕色圆眼、小幅自然张嘴和居中的短粉色舌尖形成温暖焦点；舌头在 16–32 像素下仍须可辨，但不得变成长舌、鲜红色或夸张大笑。额头只保留少量、不完全对称的浅褶，下巴与口鼻保持紧凑，不得使用镜像隆起或臃肿软垫。背景使用明亮的蜂蜜金至暖杏色轻微渐变，为黑色毛发提供高对比；脸部和耳朵应充分填充徽章，只在头顶与四周保留均衡的暖色呼吸空间，避免上方大面积空旷。颈部自然延伸到蜂蜜金徽章底边并被圆形边缘裁切，只露出一小段和一至两道浅而不对称的褶皱，不得形成悬空尖锥或大面积胸颈。`assets/ui/desktop_pet_icon.png` 是透明通用母版，并由 Godot `StatusIndicator` 直接缩放复用为 Windows 托盘图标；`assets/ui/desktop_pet_icon.ico` 包含 16、24、32、48、64、128 和 256 像素层级并用于 Windows 原生窗口与正式 EXE。原有高对比爪印 SVG 只保留为备用素材。
 - 主宠物窗口当前不得启用 `no_focus`、`unfocusable` 或运行时 `WS_EX_TOOLWINDOW`。实机验证表明这些样式会造成右键卡死、左键失效或透明窗口只剩浅色矩形。
 - 任务栏按钮通过独立 helper 调用 Windows Shell `ITaskbarList::DeleteTab(HWND)` 隐藏；helper 只修改 Shell 的任务栏列表，不得调用 `SetWindowLongPtr`、`ShowWindow` 或修改窗口所有权。此方案不负责隐藏 Alt+Tab。
-- Windows 正式导出会把已校验的 Desktop OAuth 配置注入 PCK，并将主程序、活动监听、凭据管理和任务栏隐藏四个 EXE 生成到 `dist/DesktopPet-Windows`；随后删除旧的 `dist/DesktopPet-Windows.zip` 并把完整输出目录重新压缩为同名 ZIP。普通用户不需要 `.tools` 或本地 OAuth JSON。
+- “始终置顶”现在是用户持久偏好而非无条件窗口状态：独立 `DesktopPetFullscreenHelper.exe` 每 500ms 结合窗口边界是否与显示器基本相等及 Windows 原生窗口边框样式判断是否真正全屏，通过随机本机 UDP 会话向 Godot 发送一个匿名布尔值；同屏其他软件全屏时临时取消置顶，并以不抢焦点的 Z-order 调整确保宠物实际降到全屏窗口之后。普通最大化窗口常见的越界外框不得误判为全屏；浏览器提示层、小型系统覆盖层或所属弹窗短暂成为前台时继续验证其下方已确认的全屏窗口；退出状态需连续三次轮询确认。恢复置顶时，只有用户偏好开启且 OAuth 等其他暂停条件均已解除，才允许通过同一个 helper 执行一次无焦点 `HWND_TOPMOST` 强制恢复原生层级。不得使用 `QUNS_BUSY` 判断全屏，只允许以 `QUNS_RUNNING_D3D_FULL_SCREEN` 作为独占 Direct3D 游戏兜底。不得读取、记录或发送窗口标题、进程名或应用内容。Google OAuth 浏览器交接仍可独立暂停置顶，任一暂停条件存在时都不得提前恢复。
+- Windows 正式导出会把已校验的 Desktop OAuth 配置注入 PCK，并将主程序、活动监听、凭据管理、任务栏隐藏和全屏检测五个 EXE 生成到 `dist/DesktopPet-Windows`；随后删除旧的 `dist/DesktopPet-Windows.zip` 并把完整输出目录重新压缩为同名 ZIP。普通用户不需要 `.tools` 或本地 OAuth JSON。
 - 宠物显示比例支持 75%、100%、125%、150%、200%、250% 和 300%，Godot 右键菜单字体、行距、留白与图标尺寸同步调整；Windows 原生托盘菜单仍由系统 DPI 控制。
 - Activity Center 三阶段及另一台 PC 的主要发行包验收已完成。Leo、Bobo、Milo 与 Mable 均已完成完整行为包和统一预览验收；没有行为档案的未来宠物仍保留安全回退。
 - 键鼠活动未来可以作为奖励和掉落的输入信号，但当前阶段只计数；奖励层不得直接依赖原始输入事件或按次数 1:1 发放高价值资源。
 - 正式菜单不显示模拟键鼠入口；模拟批次只保留在自动化测试中。
 - 普通源码改动后不重复导出 EXE；仅在需要最新 EXE 实机验收，或执行 Git push/merge 发布流程时清理并重新导出正式包。
+- `launch.cmd` 通过 `launch.ps1` 启动开发原型；普通启动必须先隐藏执行 Godot `--headless --import` 并等待成功，再运行主项目，确保外部替换的图片等资源不会继续读取旧 `.ctex` 缓存。`launch.ps1 -Editor` 直接进入编辑器，由编辑器负责导入。
 
 ## 唯一工作目录
 

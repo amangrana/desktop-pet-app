@@ -19,7 +19,10 @@
 ## 已实现
 
 - 透明、无边框窗口
-- 始终置顶开关
+- 始终置顶开关；同一显示器有其他软件全屏时自动暂时取消置顶，退出全屏后恢复
+- 单实例启动：重复运行 Desktop Pet 不创建第二只宠物，而是显示并置前已运行的宠物
+- 启动阶段关闭 Godot 默认 Logo，并使用完全透明的启动背景，避免宠物出现前闪出引擎启动窗口
+- 应用、Windows EXE 与托盘使用 Leo 友善开心的卡通头像图标；蜂蜜金背景衬托黑色毛发，小幅张嘴和短粉色舌尖形成暖色焦点，脸部充分填充徽章并保留均衡留白，颈部自然延伸并由徽章底边裁切；透明 PNG 提供项目通用图标，ICO 内含 16–256 像素的 Windows 图标层级
 - 拖动并保存窗口位置
 - 75%–300% 显示比例；宠物右键菜单字体、行距和留白同步缩放
 - 宠物区域接收鼠标，其他透明区域穿透
@@ -150,6 +153,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\taskb
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\credential_helper\build.ps1
 ```
 
+全屏检测 helper 每 500ms 结合窗口边界是否与显示器基本相等及 Windows 原生窗口边框样式判断是否真正全屏，并仅通过随机本机 UDP 会话发送一个布尔状态；普通最大化窗口常见的越界外框不会被误认为全屏。浏览器全屏提示层、小型系统覆盖层或所属弹窗短暂成为前台时，会继续验证其下方已确认的全屏窗口；退出状态需连续三次轮询确认，避免切换期间闪烁。无边框播放器与游戏使用相同的窗口规则，独占 Direct3D 游戏另有 Windows 专用状态兜底。退出全屏且用户偏好、OAuth 等条件均允许置顶时，Godot 会让 helper 额外执行一次不抢焦点的 `HWND_TOPMOST`，避免原生 `HWND_BOTTOM` 下沉后仅修改 Godot 属性却未实际恢复层级。它不会读取窗口标题、进程名或应用内容。重新编译时运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\fullscreen_helper\build.ps1
+```
+
 ## 打开与运行
 
 1. 安装或解压 [Godot 4.7.1 for Windows](https://godotengine.org/download/windows/)。
@@ -167,7 +176,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 .\launch.ps1 -Editor
 ```
 
-启动脚本优先使用主项目内被 Git 忽略的 `.tools/godot-4.7.1`，因此不依赖日期命名的 Codex 任务目录；如果本机 `PATH` 中已有 `godot` 或 `godot4`，也会自动使用它。
+启动脚本优先使用主项目内被 Git 忽略的 `.tools/godot-4.7.1`，因此不依赖日期命名的 Codex 任务目录；如果本机 `PATH` 中已有 `godot` 或 `godot4`，也会自动使用它。普通运行 `launch.cmd` 或 `launch.ps1` 时会先以隐藏的 headless import 阶段强制刷新项目资源，成功后才启动宠物，避免外部替换图片后继续读取旧 `.ctex` 缓存；`launch.ps1 -Editor` 仍直接打开编辑器，由编辑器完成导入。
 
 ## 复制到另一台 PC
 
@@ -235,6 +244,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\platform\windows\crede
 - refresh token 安全保存在当前 Windows 用户的凭据管理器中，重启后自动恢复登录；access token 仍只保存在进程内存。主动断开时会先持久禁止自动恢复，再删除已保存登录，因此立即退出也不会在下次启动重新连接
 - `Developer` → `Pet Note — 10 sec (test)`：验证图片内小纸条、按钮倒计时和自动关闭
 - 程序在 Windows 通知区域显示托盘图标；托盘菜单可显示/隐藏宠物、开始专注、打开 Pet Notes 或退出
+- 应用通过仅绑定 `127.0.0.1` 的单实例协调端口避免重复运行；再次启动只发送固定的“显示现有宠物”命令并立即退出，不传输窗口标题、进程名或用户内容。从托盘隐藏的宠物会恢复；其他软件仍处于全屏时继续遵守全屏避让，退出全屏后恢复原有置顶偏好
 - 托盘菜单也可直接打开 Activity Center；仅打开、刷新或关闭窗口不会改变计时与提醒，只有明确点击操作按钮才会修改对应状态
 - 活动中心最近事件只使用白名单结构：事件类型、Focus/Break/Water/Stand 分类及小时分钟；不接受或保存具体按键、鼠标坐标、应用名称和任意文本
 - 程序提供 Windows 通知区域托盘入口；主宠物窗口通过 `ITaskbarList::DeleteTab` 隐藏任务栏按钮，不修改 Godot 窗口样式
@@ -281,7 +291,9 @@ src/checkins/google_calendar_provider.gd
 src/checkins/google_oauth_client_config.gd
                                   OAuth 发行配置校验、固定 client ID 与注入路径
 addons/google_oauth_export/       Windows 导出时注入 Installed client 配置
-assets/ui/tray_icon.svg           Windows 通知区域托盘图标
+assets/ui/tray_icon.svg           备用的高对比爪印托盘素材
+assets/ui/desktop_pet_icon.png    Leo 头像应用及托盘图标透明母版
+assets/ui/desktop_pet_icon.ico    Windows EXE 与原生窗口多尺寸图标
 platform/windows/activity_helper/ActivityHelper.cs
                                   Windows Raw Input helper 源码
 platform/windows/activity_helper/DesktopPetActivityHelper.exe
@@ -294,6 +306,12 @@ platform/windows/credential_helper/CredentialHelper.cs
                                   Windows Credential Manager helper 源码
 platform/windows/credential_helper/DesktopPetCredentialHelper.exe
                                   开发运行所需的 x64 凭据 helper
+platform/windows/fullscreen_helper/FullscreenHelper.cs
+                                  匿名同屏全屏检测 helper 源码
+platform/windows/fullscreen_helper/DesktopPetFullscreenHelper.exe
+                                  开发运行所需的 x64 全屏检测 helper
+src/platform/single_instance_coordinator.gd
+                                  本机单实例占用与重复启动激活协议
 platform/windows/export_release.ps1
                                   注入 OAuth 配置并导出正式 Windows EXE
 src/pets/pet_definition.gd        宠物资源格式
@@ -319,6 +337,15 @@ launch.cmd                        可复制到其他 Windows PC 的便携启动�
 tests/activity_pipeline_test.gd   活动管线无界面自测
 tests/windows_activity_adapter_test.gd
                                   helper 注册与内部匿名批次通信自测
+tests/windows_fullscreen_adapter_test.gd
+                                  全屏 helper 匿名布尔协议与进程生命周期自测
+tests/single_instance_coordinator_test.gd
+                                  单实例端口占用、协议过滤和激活通知自测
+tests/fullscreen_topmost_integration_test.gd
+                                  全屏、用户偏好和 OAuth 组合置顶状态机自测
+tests/windows_fullscreen_helper_live_test.cs
+tests/run_windows_fullscreen_helper_live_test.ps1
+                                  独立 Windows 窗口的最大化、全屏与退出全屏真实层级自测
 tests/timer_manager_test.gd       计时状态与绝对时间恢复自测
 tests/focus_timer_integration_test.gd
                                   菜单、持久化和完成气泡集成自测
@@ -378,7 +405,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\platform\windows\export_release.ps1
 ```
 
-脚本会校验固定 client ID，通过进程环境把 client 配置交给 Godot 导出插件，并清理后重建 `dist\DesktopPet-Windows` 中的 `DesktopPet.exe`、`DesktopPetActivityHelper.exe`、`DesktopPetCredentialHelper.exe` 和 `DesktopPetTaskbarHelper.exe`。四个 EXE 必须一起分发并放在同一目录。每次导出还会先删除旧的 `dist\DesktopPet-Windows.zip`，再把完整输出目录重新压缩为同名 ZIP，供复制和分发。测试 PCK 位于独立的 `dist\tests`，不会混入正式包。原始 JSON 不会进入发行包；插件只加入运行所需的规范化 `client_id` 与 `client_secret`。CI 可改用 `DESKTOP_PET_GOOGLE_CLIENT_ID` 和 `DESKTOP_PET_GOOGLE_CLIENT_SECRET` 两个受保护环境变量，不需要创建 JSON。
+脚本会校验固定 client ID，通过进程环境把 client 配置交给 Godot 导出插件，并清理后重建 `dist\DesktopPet-Windows` 中的 `DesktopPet.exe`、`DesktopPetActivityHelper.exe`、`DesktopPetCredentialHelper.exe`、`DesktopPetTaskbarHelper.exe` 和 `DesktopPetFullscreenHelper.exe`。五个 EXE 必须一起分发并放在同一目录。每次导出还会先删除旧的 `dist\DesktopPet-Windows.zip`，再把完整输出目录重新压缩为同名 ZIP，供复制和分发。测试 PCK 位于独立的 `dist\tests`，不会混入正式包。原始 JSON 不会进入发行包；插件只加入运行所需的规范化 `client_id` 与 `client_secret`。CI 可改用 `DESKTOP_PET_GOOGLE_CLIENT_ID` 和 `DESKTOP_PET_GOOGLE_CLIENT_SECRET` 两个受保护环境变量，不需要创建 JSON。
 
 如果发行配置缺失或 client ID 不匹配，应用会在打开浏览器前显示配置错误。不要把 Desktop client secret 当作用户数据或访问令牌：它随 Installed 应用分发且可被提取；真正能访问个人日历的是每位用户授权后生成并保存于其 Windows 凭据管理器中的 refresh token。
 
@@ -394,5 +421,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 - 当前只提供 English 和简体中文；宠物名称仍使用宠物包中定义的专名。
 - 鼠标穿透区域由待机 PNG 的 alpha 自动生成简化多边形，并保留动作与点击爱心所需的小范围安全边距；它不是逐像素命中。
 - 活动中心已支持 Focus 操作、Reminder 开关与到期处理、待处理数量和会话级最近事件；不提供跨重启历史或趋势图，也不在卡片内编辑时长或勿扰时间。
-- 独占全屏应用可能覆盖置顶窗口。
+- Windows 全屏检测按宠物所在显示器工作；少数使用特殊覆盖层或非标准窗口边界的独占游戏仍需实机验收。
 - 每个新宠物包仍需配置能覆盖动作和特效的回退点击轮廓；正常运行优先使用自动 alpha 轮廓。

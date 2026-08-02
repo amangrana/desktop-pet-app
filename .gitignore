@@ -4,6 +4,7 @@
 bin/
 obj/
 dist/
+/tmp/
 *.user
 
 # Local Google OAuth credentials. Never commit client secrets.
