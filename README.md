@@ -2,7 +2,7 @@
 
 A low-distraction desktop companion for Windows: a cartoon pet that sits on top of your desktop, reacts to your activity, and helps with focus sessions and health reminders.
 
-Built with **Godot 4.7.1 / GDScript**, plus four small **C# native Windows helpers**. The project was developed largely with AI coding agents (OpenAI Codex), with design decisions, privacy rules and acceptance criteria written down in [`AGENTS.md`](AGENTS.md) and [`docs/`](docs/) so each agent session follows the same rules.
+Built with **Godot 4.7.1 / GDScript**, plus four small **C# native Windows helpers**. Built by directing AI coding agents (OpenAI Codex); see [How it was built](#how-it-was-built).
 
 ![Desktop Pet preview](preview.png)
 
@@ -16,6 +16,16 @@ Built with **Godot 4.7.1 / GDScript**, plus four small **C# native Windows helpe
 - **Health reminders**: water and stand-up reminders with snooze, quiet hours, and deferral while a focus session is running.
 - **Pet Notes**: small in-picture notes for a daily briefing, weather (Open-Meteo) and upcoming events from your own Google Calendar.
 - **Activity Center and tray menu**, single-instance launch, English / Simplified Chinese UI.
+
+## How it was built
+
+The code was written by AI coding agents (OpenAI Codex). My part was the requirements and constraints, the design decisions and trade-offs, reviewing the agents' work, and testing, including real-machine acceptance on Windows. The rules every agent session must follow are written down in [`AGENTS.md`](AGENTS.md) and [`docs/`](docs/). Key decisions:
+
+- **A hard privacy boundary for activity sensing.** Input is read in a separate helper process that may send only two aggregate counts. Sensing is off by default and opt-in, and no key codes, coordinates, window titles or timing sequences are ever parsed or stored.
+- **Low distraction first.** Reminders that come due during a focus session are held until the break, quiet hours hold them overnight, and the pet steps behind any fullscreen app.
+- **Pets as data, not code.** A new pet is a self-contained package that follows a versioned behavior spec; core code never names a specific pet, and missing animations fall back to the idle frame.
+- **Native integration without risky window styles.** After real-machine testing showed that some window styles broke input, Windows-specific work moved into small helper processes that never change the pet window's styles.
+- **No location tracking.** Weather uses a city the user types in; the app never asks Windows for location and doesn't store coordinates.
 
 ## Engineering highlights
 
